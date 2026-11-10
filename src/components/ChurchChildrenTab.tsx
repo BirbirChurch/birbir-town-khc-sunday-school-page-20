@@ -857,7 +857,7 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
         else occupation = 'ተማሪ';
       }
 
-      // Chapel detection & normalization
+      // Chapel detection & normalization (Preserves clean new chapel names for dynamic addition)
       let chapel = mapping.chapelIdx !== -1 && row[mapping.chapelIdx] ? String(row[mapping.chapelIdx]).trim() : '';
       if (!chapel) {
         chapel = defChapel;
@@ -866,11 +866,62 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
         const matchedCh = chapelList.find(
           (ch) => normalizeChapel(ch) === chNorm || ch.includes(chapel) || chapel.includes(ch)
         );
-        if (matchedCh) chapel = matchedCh;
+        if (matchedCh) {
+          chapel = matchedCh;
+        } else {
+          // New chapel detected in file! Format cleanly with "ቻፕል" suffix if omitted
+          if (!chapel.endsWith('ቻፕል') && !chapel.endsWith('ማዕከል') && !chapel.endsWith('አጥቢያ')) {
+            chapel = `${chapel} ቻፕል`;
+          }
+        }
       }
 
-      const parentName = mapping.parentIdx !== -1 && row[mapping.parentIdx] ? String(row[mapping.parentIdx]).trim() : undefined;
-      const phone = mapping.phoneIdx !== -1 && row[mapping.phoneIdx] ? String(row[mapping.phoneIdx]).trim() : undefined;
+      // Parent extraction heuristics (Header match -> Father column -> Child's 2nd/3rd name fallback)
+      let parentName: string | undefined = undefined;
+      if (mapping.parentIdx !== -1 && row[mapping.parentIdx]) {
+        parentName = String(row[mapping.parentIdx]).trim();
+      }
+      if (!parentName && mapping.fatherIdx !== -1 && row[mapping.fatherIdx]) {
+        const father = String(row[mapping.fatherIdx]).trim();
+        const gf = mapping.grandfatherIdx !== -1 && row[mapping.grandfatherIdx] ? String(row[mapping.grandfatherIdx]).trim() : '';
+        parentName = gf ? `${father} ${gf}` : father;
+      }
+      if (!parentName) {
+        const nameParts = rawName.split(' ').filter(Boolean);
+        if (nameParts.length >= 2) {
+          parentName = nameParts.slice(1).join(' ');
+        }
+      }
+
+      // Phone extraction & Ethiopian number standardization
+      let phone: string | undefined = undefined;
+      if (mapping.phoneIdx !== -1 && row[mapping.phoneIdx]) {
+        phone = String(row[mapping.phoneIdx]).trim();
+      }
+      if (!phone) {
+        // Fallback: scan row cells for Ethiopian phone digits (09..., 07..., +251...)
+        for (let c = 0; c < row.length; c++) {
+          if (c === mapping.nameIdx || c === mapping.ageIdx || c === mapping.genderIdx) continue;
+          const val = String(row[c] || '').trim();
+          const clean = val.replace(/[\s\-\(\)]/g, '');
+          if (/^(\+?251|0)?[97]\d{8}$/.test(clean)) {
+            phone = val;
+            break;
+          }
+        }
+      }
+      if (phone) {
+        let cleanDigits = phone.replace(/[\s\-\(\)]/g, '');
+        if (cleanDigits.startsWith('+251')) {
+          cleanDigits = '0' + cleanDigits.substring(4);
+        } else if (cleanDigits.startsWith('251')) {
+          cleanDigits = '0' + cleanDigits.substring(3);
+        } else if (cleanDigits.length === 9 && (cleanDigits.startsWith('9') || cleanDigits.startsWith('7'))) {
+          cleanDigits = '0' + cleanDigits;
+        }
+        phone = cleanDigits;
+      }
+
       const residence = mapping.residenceIdx !== -1 && row[mapping.residenceIdx] ? String(row[mapping.residenceIdx]).trim() : undefined;
 
       childrenList.push({
@@ -1001,13 +1052,13 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
           }
 
           // Parent detection
-          if (str.includes('ወላጅ') || str.includes('እናት') || str.includes('አሳዳጊ') || str.includes('parent') || str.includes('guardian')) {
+          if (str.includes('ወላጅ') || str.includes('አባት') || str.includes('እናት') || str.includes('አሳዳጊ') || str.includes('parent') || str.includes('guardian') || str.includes('father')) {
             if (parentIdx === -1) parentIdx = idx;
           }
 
           // Phone detection
-          if (str.includes('ስልክ') || str.includes('phone') || str.includes('mobile') || str.includes('tel') || str.includes('cell') || str.includes('ሞባይል')) {
-            if (phoneIdx === -1) phoneIdx = idx;
+          if (str.includes('ስልክ') || str.includes('phone') || str.includes('mobile') || str.includes('tel') || str.includes('cell') || str.includes('ሞባይል') || str.includes('ቁጥር') || str.includes('contact')) {
+            if (phoneIdx === -1 && !str.includes('ተ.ቁ') && !str.includes('ተቁ')) phoneIdx = idx;
           }
 
           // Residence detection
@@ -1019,6 +1070,25 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
         // Smart fallbacks if header index wasn't identified
         if (nameIdx === -1) nameIdx = 0;
         if (genderIdx === -1) genderIdx = Math.min(1, headerRow.length - 1);
+        if (parentIdx === -1 && fatherIdx !== -1) parentIdx = fatherIdx;
+
+        if (phoneIdx === -1) {
+          // Scan sample rows for Ethiopian phone numbers in any column
+          for (let c = 0; c < headerRow.length; c++) {
+            if (c === nameIdx || c === ageIdx || c === genderIdx) continue;
+            let phoneMatchCount = 0;
+            for (let r = headerRowIndex + 1; r < Math.min(headerRowIndex + 8, rawRows.length); r++) {
+              const val = String(rawRows[r]?.[c] || '').trim().replace(/[\s\-\(\)]/g, '');
+              if (/^(\+?251|0)?[97]\d{8}$/.test(val)) {
+                phoneMatchCount++;
+              }
+            }
+            if (phoneMatchCount >= 1) {
+              phoneIdx = c;
+              break;
+            }
+          }
+        }
         if (ageIdx === -1) {
           // Look for column with numeric values or birth years in sample rows
           for (let c = 0; c < headerRow.length; c++) {

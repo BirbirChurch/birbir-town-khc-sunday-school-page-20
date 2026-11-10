@@ -675,21 +675,39 @@ export default function App() {
       id: generateUniqueId()
     };
     updateAppData(
-      (prev) => ({
-        ...prev,
-        churchChildren: [...(prev.churchChildren || []), childWithId]
-      }),
+      (prev) => {
+        const existingChapels = new Set(prev.chapels || DEFAULT_CHAPELS);
+        const updatedChapels =
+          newChild.chapel && !existingChapels.has(newChild.chapel)
+            ? [...(prev.chapels || DEFAULT_CHAPELS), newChild.chapel]
+            : prev.chapels || DEFAULT_CHAPELS;
+
+        return {
+          ...prev,
+          chapels: updatedChapels,
+          churchChildren: [...(prev.churchChildren || []), childWithId]
+        };
+      },
       { immediate: true }
     );
   };
 
   const handleUpdateChurchChild = (updatedChild: ChurchChild) => {
-    updateAppData((prev) => ({
-      ...prev,
-      churchChildren: (prev.churchChildren || []).map((c) =>
-        c.id === updatedChild.id ? updatedChild : c
-      )
-    }));
+    updateAppData((prev) => {
+      const existingChapels = new Set(prev.chapels || DEFAULT_CHAPELS);
+      const updatedChapels =
+        updatedChild.chapel && !existingChapels.has(updatedChild.chapel)
+          ? [...(prev.chapels || DEFAULT_CHAPELS), updatedChild.chapel]
+          : prev.chapels || DEFAULT_CHAPELS;
+
+      return {
+        ...prev,
+        chapels: updatedChapels,
+        churchChildren: (prev.churchChildren || []).map((c) =>
+          c.id === updatedChild.id ? updatedChild : c
+        )
+      };
+    });
   };
 
   const handleDeleteChurchChild = (id: number) => {
@@ -709,10 +727,27 @@ export default function App() {
       id: generateUniqueId()
     }));
     updateAppData(
-      (prev) => ({
-        ...prev,
-        churchChildren: mode === 'replace' ? withIds : [...(prev.churchChildren || []), ...withIds]
-      }),
+      (prev) => {
+        const existingChapels = new Set(prev.chapels || DEFAULT_CHAPELS);
+        const newChapels: string[] = [];
+        children.forEach((c) => {
+          if (c.chapel && !existingChapels.has(c.chapel)) {
+            existingChapels.add(c.chapel);
+            newChapels.push(c.chapel);
+          }
+        });
+
+        const updatedChapels =
+          newChapels.length > 0
+            ? [...(prev.chapels || DEFAULT_CHAPELS), ...newChapels]
+            : prev.chapels || DEFAULT_CHAPELS;
+
+        return {
+          ...prev,
+          chapels: updatedChapels,
+          churchChildren: mode === 'replace' ? withIds : [...(prev.churchChildren || []), ...withIds]
+        };
+      },
       { immediate: true }
     );
   };
