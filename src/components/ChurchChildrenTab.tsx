@@ -244,6 +244,7 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
   const [selectedChapelFilter, setSelectedChapelFilter] = useState<string>('all');
   // Multi-Chapel Filtering for Main Registry Tab
   const [selectedChapels, setSelectedChapels] = useState<string[]>([]);
+  const [displayLayoutMode, setDisplayLayoutMode] = useState<'table' | 'grouped_chapels'>('table');
   const [copiedPhoneId, setCopiedPhoneId] = useState<number | null>(null);
 
   // Modals
@@ -503,6 +504,20 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
       return true;
     });
   }, [churchChildrenWithStatus, searchTerm, viewFilter, selectedChapels, selectedChapelFilter, genderFilter, ageFilter]);
+
+  // 7. Group filtered children by Chapel for Multi-Chapel All-in-One View
+  const childrenGroupedByChapel = useMemo(() => {
+    const groups: { [chapel: string]: typeof filteredChildren } = {};
+    chapelStats.chapels.forEach((ch) => {
+      groups[ch] = [];
+    });
+    filteredChildren.forEach((child) => {
+      const ch = child.chapel || 'ዋናው ማዕከል ቻፕል';
+      if (!groups[ch]) groups[ch] = [];
+      groups[ch].push(child);
+    });
+    return groups;
+  }, [chapelStats.chapels, filteredChildren]);
 
   // Copy phone handler
   const handleCopyPhone = (id: number, phone: string) => {
@@ -1473,18 +1488,62 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
               በየቻፕሉ ያሉ ልጆች፣ የሚማሩ፣ የማይማሩ እና የወላጅ ስልክ መገናኛ (አንድ ወይም ከዚያ በላይ ቻፕሎችን መርጠው ማጣራት ይችላሉ)
             </p>
           </div>
-          {(selectedChapels.length > 0 || selectedChapelFilter !== 'all') && (
+          <div className="flex items-center gap-2 flex-wrap print:hidden">
             <button
               type="button"
               onClick={() => {
-                setSelectedChapels([]);
+                setSelectedChapels(chapelStats.chapels);
                 setSelectedChapelFilter('all');
               }}
-              className="text-xs font-bold text-blue-700 hover:text-blue-900 bg-blue-50 px-3 py-1.5 rounded-xl transition self-start print:hidden cursor-pointer border border-blue-200"
+              className="text-xs font-bold text-blue-900 bg-blue-100/80 hover:bg-blue-200 px-3 py-1.5 rounded-xl transition cursor-pointer border border-blue-300/80 flex items-center gap-1.5 shadow-2xs"
+              title="በስርዓቱ ውስጥ ያሉትን 10ሩንም ቻፕሎች በአንድ ጊዜ ምረጥ"
             >
-              ✕ የቻፕል ማጣሪያዎችን አጽዳ ({selectedChapels.length > 0 ? `${selectedChapels.length} ቻፕሎች` : selectedChapelFilter})
+              <CheckCircle2 className="w-3.5 h-3.5 text-blue-800" />
+              <span>✓ ሁሉንም ቻፕሎች በአንድ ጊዜ ምረጥ</span>
             </button>
-          )}
+
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setDisplayLayoutMode('table')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  displayLayoutMode === 'table'
+                    ? 'bg-blue-900 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="ሁሉንም የቤተክርስቲያን ልጆች በአንድ የተደራጀ ማስተር ሰንጠረዥ አሳይ"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span>📋 በአንድ ሰንጠረዥ</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDisplayLayoutMode('grouped_chapels')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  displayLayoutMode === 'grouped_chapels'
+                    ? 'bg-blue-900 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="10ሩንም ቻፕሎች በየራሳቸው ገጽና ሰንጠረዥ ከፋፍለህ በአንድ ጊዜ አሳይ"
+              >
+                <Church className="w-3.5 h-3.5 text-amber-300" />
+                <span>🏛️ በየቻፕሉ የተከፋፈለ እይታ</span>
+              </button>
+            </div>
+
+            {(selectedChapels.length > 0 || selectedChapelFilter !== 'all') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedChapels([]);
+                  setSelectedChapelFilter('all');
+                }}
+                className="text-xs font-bold text-rose-700 hover:text-rose-900 bg-rose-50 px-3 py-1.5 rounded-xl transition cursor-pointer border border-rose-200"
+              >
+                ✕ የቻፕል ማጣሪያዎችን አጽዳ ({selectedChapels.length > 0 ? `${selectedChapels.length} ቻፕሎች` : selectedChapelFilter})
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -1828,204 +1887,330 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
         </div>
       )}
 
-      {/* Main Table: Church Children List with Direct Sunday School Link, Chapel, and Parent Phone */}
+      {/* Main Table or Grouped Chapels View */}
       {viewFilter !== 'missing_from_church' ? (
-        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden print:border-none print:shadow-none print:rounded-none">
-          <div className="overflow-x-auto print:overflow-visible">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-900 text-white uppercase text-[11px] tracking-wider print:bg-slate-800 print:text-white">
-                  <th className="py-3 px-3 text-center w-12 font-bold">ተ.ቁ</th>
-                  <th className="py-3 px-4 font-extrabold text-[13pt] text-white min-w-[200px]">የልጁ ሙሉ ስም</th>
-                  <th className="py-3 px-3 font-bold min-w-[130px]">ቻፕል (አጥቢያ)</th>
-                  <th className="py-3 px-3 text-center font-bold w-16">ጾታ</th>
-                  <th className="py-3 px-3 text-center font-bold w-16">ዕድሜ</th>
-                  <th className="py-3 px-3 font-bold min-w-[120px]">የትምህርት ደረጃ</th>
-                  <th className="py-3 px-3 font-bold min-w-[110px]">የስራ ዓይነት</th>
-                  <th className="py-3 px-3 font-bold min-w-[150px]">የሰንበት ት/ቤት የመማር ሁኔታ</th>
-                  <th className="py-3 px-3 font-bold min-w-[140px]">የወላጅ/አሳዳጊ ስም</th>
-                  <th className="py-3 px-3 font-bold min-w-[140px]">የወላጅ ስልክ ቁጥር</th>
-                  <th className="py-3 px-3 font-bold min-w-[120px]">መኖሪያ ቀበሌ</th>
-                  <th className="py-3 px-3 text-center font-bold w-24 print:hidden">እርምጃዎች</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {filteredChildren.length === 0 ? (
-                  <tr>
-                    <td colSpan={12} className="py-12 text-center text-slate-500">
-                      <Users className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                      <p className="font-semibold text-sm">በተመረጠው መስፈርት የተገኘ ልጅ የለም!</p>
-                      <p className="text-xs text-slate-400 mt-1">የፍለጋ ቃሉን ወይም ማጣሪያውን ይቀይሩ ወይም አዲስ ልጅ ይመዝግቡ።</p>
-                    </td>
+        displayLayoutMode === 'grouped_chapels' ? (
+          <div className="space-y-6">
+            {chapelStats.chapels.map((chName) => {
+              const chChildren = childrenGroupedByChapel[chName] || [];
+              const chStat = chapelStats.statsMap[chName] || { total: 0, enrolled: 0, notEnrolled: 0, male: 0, female: 0 };
+              const rate = chStat.total > 0 ? Math.round((chStat.enrolled / chStat.total) * 100) : 0;
+
+              return (
+                <div key={`grouped_sec_${chName}`} className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden print:break-inside-avoid">
+                  {/* Chapel Section Header */}
+                  <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <Church className="w-5 h-5 text-amber-300 shrink-0" />
+                      <div>
+                        <h3 className="font-extrabold text-base text-white flex items-center gap-2">
+                          <span>{chName}</span>
+                          <span className="bg-amber-400 text-slate-950 text-xs font-black px-2.5 py-0.5 rounded-full">
+                            {chStat.total} ልጆች
+                          </span>
+                        </h3>
+                        <p className="text-[11px] text-slate-300 mt-0.5">
+                          ወንድ፦ <strong>{chStat.male}</strong> | ሴት፦ <strong>{chStat.female}</strong> | በሰንበት ት/ቤት የሚማሩ፦ <strong className="text-emerald-300">{chStat.enrolled} ({rate}%)</strong> | የማይማሩ፦ <strong className="text-amber-300">{chStat.notEnrolled}</strong>
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleToggleTabChapelFilter(chName)}
+                      className="bg-white/10 hover:bg-white/20 text-white font-bold text-xs px-3 py-1.5 rounded-xl border border-white/20 transition print:hidden shrink-0 cursor-pointer"
+                    >
+                      {selectedChapels.includes(chName) ? '✕ ምርጫውን አስወግድ' : '🔍 ይህን ቻፕል ብቻ አሳይ'}
+                    </button>
+                  </div>
+
+                  {/* Chapel Children Table */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 uppercase text-[10px] tracking-wider">
+                          <th className="py-2.5 px-3 text-center w-10">ተ.ቁ</th>
+                          <th className="py-2.5 px-4 font-extrabold text-[12pt] text-slate-900 min-w-[180px]">የልጁ ሙሉ ስም</th>
+                          <th className="py-2.5 px-3 text-center w-14">ጾታ</th>
+                          <th className="py-2.5 px-3 text-center w-14">ዕድሜ</th>
+                          <th className="py-2.5 px-3 min-w-[110px]">የትምህርት ደረጃ</th>
+                          <th className="py-2.5 px-3 min-w-[130px]">የሰንበት ት/ቤት ሁኔታ</th>
+                          <th className="py-2.5 px-3 min-w-[130px]">የወላጅ ስም</th>
+                          <th className="py-2.5 px-3 min-w-[130px]">የወላጅ ስልክ</th>
+                          <th className="py-2.5 px-3 text-center w-20 print:hidden">እርምጃዎች</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {chChildren.length === 0 ? (
+                          <tr>
+                            <td colSpan={9} className="py-6 text-center text-slate-400 font-medium">
+                              በዚህ ቻፕል እስካሁን የተመዘገበ ልጅ የለም።
+                            </td>
+                          </tr>
+                        ) : (
+                          chChildren.map((child, idx) => {
+                            const isMale = child.gender === 'ወ';
+                            const isFemale = child.gender === 'ሴ';
+                            const isCopied = copiedPhoneId === child.id;
+
+                            return (
+                              <tr key={`grp_ch_${child.id}`} className="hover:bg-blue-50/30 transition-colors">
+                                <td className="py-2 px-3 text-center font-bold text-slate-500 bg-slate-50/50">{idx + 1}</td>
+                                <td className="py-2 px-4 font-bold text-[12pt] text-slate-900">{child.name}</td>
+                                <td className="py-2 px-3 text-center">
+                                  <span className={`inline-block px-2 py-0.5 rounded font-bold text-[10px] ${isMale ? 'bg-blue-100 text-blue-800' : isFemale ? 'bg-rose-100 text-rose-800' : 'text-slate-400'}`}>
+                                    {isMale ? 'ወንድ' : isFemale ? 'ሴት' : '-'}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-3 text-center font-bold text-slate-800">{child.age ? `${child.age} ዓመት` : '-'}</td>
+                                <td className="py-2 px-3 text-slate-700">{child.educationLevel || '-'}</td>
+                                <td className="py-2 px-3">
+                                  {child.isEnrolled ? (
+                                    <span className="inline-flex items-center gap-1 text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded font-bold text-[10px] border border-emerald-200">
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                      <span>ይማራል ({child.enrolledClass})</span>
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-amber-900 bg-amber-50 px-2 py-0.5 rounded font-bold text-[10px] border border-amber-200">
+                                      <AlertCircle className="w-3 h-3 text-amber-600" />
+                                      <span>አይማርም</span>
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-2 px-3 text-slate-700">{child.parentName || '-'}</td>
+                                <td className="py-2 px-3 font-mono text-[11px]">
+                                  {child.phone ? (
+                                    <div className="flex items-center gap-1">
+                                      <a href={`tel:${child.phone}`} className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 hover:underline">
+                                        <PhoneCall className="w-3 h-3 text-emerald-600" />
+                                        <span>{child.phone}</span>
+                                      </a>
+                                      <button type="button" onClick={() => handleCopyPhone(child.id, child.phone!)} className="p-1 text-slate-400 hover:text-slate-600">
+                                        {isCopied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-400 italic">-</span>
+                                  )}
+                                </td>
+                                <td className="py-2 px-3 text-center print:hidden">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button type="button" onClick={() => openEditModal(child)} className="p-1 hover:bg-slate-100 text-slate-600 rounded" title="አስተካክል">
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button type="button" onClick={() => { if (window.confirm(`"${child.name}" ይሰረዝ?`)) onDeleteChild(child.id); }} className="p-1 hover:bg-rose-50 text-rose-500 rounded" title="ሰርዝ">
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden print:border-none print:shadow-none print:rounded-none">
+            <div className="overflow-x-auto print:overflow-visible">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-900 text-white uppercase text-[11px] tracking-wider print:bg-slate-800 print:text-white">
+                    <th className="py-3 px-3 text-center w-12 font-bold">ተ.ቁ</th>
+                    <th className="py-3 px-4 font-extrabold text-[13pt] text-white min-w-[200px]">የልጁ ሙሉ ስም</th>
+                    <th className="py-3 px-3 font-bold min-w-[130px]">ቻፕል (አጥቢያ)</th>
+                    <th className="py-3 px-3 text-center font-bold w-16">ጾታ</th>
+                    <th className="py-3 px-3 text-center font-bold w-16">ዕድሜ</th>
+                    <th className="py-3 px-3 font-bold min-w-[120px]">የትምህርት ደረጃ</th>
+                    <th className="py-3 px-3 font-bold min-w-[110px]">የስራ ዓይነት</th>
+                    <th className="py-3 px-3 font-bold min-w-[150px]">የሰንበት ት/ቤት የመማር ሁኔታ</th>
+                    <th className="py-3 px-3 font-bold min-w-[140px]">የወላጅ/አሳዳጊ ስም</th>
+                    <th className="py-3 px-3 font-bold min-w-[140px]">የወላጅ ስልክ ቁጥር</th>
+                    <th className="py-3 px-3 font-bold min-w-[120px]">መኖሪያ ቀበሌ</th>
+                    <th className="py-3 px-3 text-center font-bold w-24 print:hidden">እርምጃዎች</th>
                   </tr>
-                ) : (
-                  filteredChildren.map((child, idx) => {
-                    const isMale = child.gender === 'ወ';
-                    const isFemale = child.gender === 'ሴ';
-                    const isCopied = copiedPhoneId === child.id;
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {filteredChildren.length === 0 ? (
+                    <tr>
+                      <td colSpan={12} className="py-12 text-center text-slate-500">
+                        <Users className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                        <p className="font-semibold text-sm">በተመረጠው መስፈርት የተገኘ ልጅ የለም!</p>
+                        <p className="text-xs text-slate-400 mt-1">የፍለጋ ቃሉን ወይም ማጣሪያውን ይቀይሩ ወይም አዲስ ልጅ ይመዝግቡ።</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredChildren.map((child, idx) => {
+                      const isMale = child.gender === 'ወ';
+                      const isFemale = child.gender === 'ሴ';
+                      const isCopied = copiedPhoneId === child.id;
 
-                    return (
-                      <tr
-                        key={child.id}
-                        className="hover:bg-blue-50/40 transition-colors print:break-inside-avoid"
-                      >
-                        {/* Index */}
-                        <td className="py-2.5 px-3 text-center font-bold text-slate-500 bg-slate-50/50 print:bg-transparent">
-                          {idx + 1}
-                        </td>
+                      return (
+                        <tr
+                          key={child.id}
+                          className="hover:bg-blue-50/40 transition-colors print:break-inside-avoid"
+                        >
+                          {/* Index */}
+                          <td className="py-2.5 px-3 text-center font-bold text-slate-500 bg-slate-50/50 print:bg-transparent">
+                            {idx + 1}
+                          </td>
 
-                        {/* Child Name (13pt Bold) */}
-                        <td className="py-2.5 px-4 font-bold text-[13pt] text-slate-900 min-w-[200px] leading-normal">
-                          <span>{child.name}</span>
-                        </td>
+                          {/* Child Name (13pt Bold) */}
+                          <td className="py-2.5 px-4 font-bold text-[13pt] text-slate-900 min-w-[200px] leading-normal">
+                            <span>{child.name}</span>
+                          </td>
 
-                        {/* Chapel */}
-                        <td className="py-2.5 px-3">
-                          <span className="inline-flex items-center gap-1 font-bold text-[11px] text-blue-900 bg-blue-50/80 px-2.5 py-0.5 rounded-lg border border-blue-200/80 print:border-none print:bg-transparent print:p-0">
-                            <Church className="w-3 h-3 text-blue-700 print:hidden shrink-0" />
-                            <span>{child.chapel || 'ዋናው ማዕከል ቻፕል'}</span>
-                          </span>
-                        </td>
-
-                        {/* Gender */}
-                        <td className="py-2.5 px-3 text-center">
-                          <span
-                            className={`inline-block px-2 py-0.5 rounded font-bold text-[11px] ${
-                              isMale
-                                ? 'bg-blue-100 text-blue-800'
-                                : isFemale
-                                ? 'bg-rose-100 text-rose-800'
-                                : 'text-slate-400'
-                            } print:bg-transparent print:text-black`}
-                          >
-                            {isMale ? 'ወንድ' : isFemale ? 'ሴት' : '-'}
-                          </span>
-                        </td>
-
-                        {/* Age */}
-                        <td className="py-2.5 px-3 text-center font-bold text-slate-800 tabular-nums">
-                          {child.age ? `${child.age} ዓመት` : '-'}
-                        </td>
-
-                        {/* Education Level */}
-                        <td className="py-2.5 px-3">
-                          <span className="inline-flex items-center gap-1 font-semibold text-[11px] text-indigo-900 bg-indigo-50/90 px-2 py-0.5 rounded-lg border border-indigo-200/70 print:border-none print:bg-transparent print:p-0">
-                            <BookOpen className="w-3 h-3 text-indigo-600 print:hidden shrink-0" />
-                            <span>{child.educationLevel || '-'}</span>
-                          </span>
-                        </td>
-
-                        {/* Occupation */}
-                        <td className="py-2.5 px-3">
-                          <span className="inline-flex items-center gap-1 font-medium text-[11px] text-slate-700 bg-slate-100 px-2 py-0.5 rounded-lg print:border-none print:bg-transparent print:p-0">
-                            <Briefcase className="w-3 h-3 text-slate-500 print:hidden shrink-0" />
-                            <span>{child.occupation || '-'}</span>
-                          </span>
-                        </td>
-
-                        {/* Sunday School Enrollment Status */}
-                        <td className="py-2.5 px-3">
-                          {child.isEnrolled ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200/80 font-bold text-[11px] print:border-none print:bg-transparent print:p-0">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600 print:hidden shrink-0" />
-                              <span>ይማራል ({child.enrolledClass})</span>
+                          {/* Chapel */}
+                          <td className="py-2.5 px-3">
+                            <span className="inline-flex items-center gap-1 font-bold text-[11px] text-blue-900 bg-blue-50/80 px-2.5 py-0.5 rounded-lg border border-blue-200/80 print:border-none print:bg-transparent print:p-0">
+                              <Church className="w-3 h-3 text-blue-700 print:hidden shrink-0" />
+                              <span>{child.chapel || 'ዋናው ማዕከል ቻፕል'}</span>
                             </span>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-900 border border-amber-200 font-bold text-[11px] print:border-none print:bg-transparent print:p-0">
-                                <AlertCircle className="w-3 h-3 text-amber-600 print:hidden shrink-0" />
-                                <span>አይማርም</span>
+                          </td>
+
+                          {/* Gender */}
+                          <td className="py-2.5 px-3 text-center">
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded font-bold text-[11px] ${
+                                isMale
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : isFemale
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : 'text-slate-400'
+                              } print:bg-transparent print:text-black`}
+                            >
+                              {isMale ? 'ወንድ' : isFemale ? 'ሴት' : '-'}
+                            </span>
+                          </td>
+
+                          {/* Age */}
+                          <td className="py-2.5 px-3 text-center font-bold text-slate-800 tabular-nums">
+                            {child.age ? `${child.age} ዓመት` : '-'}
+                          </td>
+
+                          {/* Education Level */}
+                          <td className="py-2.5 px-3">
+                            <span className="inline-flex items-center gap-1 font-semibold text-[11px] text-indigo-900 bg-indigo-50/90 px-2 py-0.5 rounded-lg border border-indigo-200/70 print:border-none print:bg-transparent print:p-0">
+                              <BookOpen className="w-3 h-3 text-indigo-600 print:hidden shrink-0" />
+                              <span>{child.educationLevel || '-'}</span>
+                            </span>
+                          </td>
+
+                          {/* Occupation */}
+                          <td className="py-2.5 px-3">
+                            <span className="inline-flex items-center gap-1 font-medium text-[11px] text-slate-700 bg-slate-100 px-2 py-0.5 rounded-lg print:border-none print:bg-transparent print:p-0">
+                              <Briefcase className="w-3 h-3 text-slate-500 print:hidden shrink-0" />
+                              <span>{child.occupation || '-'}</span>
+                            </span>
+                          </td>
+
+                          {/* Sunday School Enrollment Status */}
+                          <td className="py-2.5 px-3">
+                            {child.isEnrolled ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200/80 font-bold text-[11px] print:border-none print:bg-transparent print:p-0">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600 print:hidden shrink-0" />
+                                <span>ይማራል ({child.enrolledClass})</span>
                               </span>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-900 border border-amber-200 font-bold text-[11px] print:border-none print:bg-transparent print:p-0">
+                                  <AlertCircle className="w-3 h-3 text-amber-600 print:hidden shrink-0" />
+                                  <span>አይማርም</span>
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEnrollTargetChild(child);
+                                    setSelectedEnrollClass(classList[0] || 'ማቆያ ክፍል');
+                                  }}
+                                  className="text-[11px] text-blue-700 hover:text-blue-900 font-bold hover:underline print:hidden flex items-center gap-0.5"
+                                  title="ይህን ልጅ ወደ ሰንበት ት/ቤት መዝግብ"
+                                >
+                                  <span>መዝግብ</span>
+                                  <ChevronRight className="w-3 h-3" />
+                                </button>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Parent / Guardian Name */}
+                          <td className="py-2.5 px-3 text-slate-700 font-medium">
+                            {child.parentName || '-'}
+                          </td>
+
+                          {/* Parent Phone Number with Quick Call & Copy */}
+                          <td className="py-2.5 px-3 text-slate-800 font-mono text-[11px]">
+                            {child.phone ? (
+                              <div className="flex items-center gap-1.5">
+                                <a
+                                  href={`tel:${child.phone}`}
+                                  className="inline-flex items-center gap-1 font-bold text-emerald-800 hover:text-emerald-950 hover:underline bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200 print:border-none print:bg-transparent print:p-0"
+                                  title="ደውል"
+                                >
+                                  <PhoneCall className="w-3 h-3 text-emerald-600 print:hidden shrink-0" />
+                                  <span>{child.phone}</span>
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyPhone(child.id, child.phone!)}
+                                  className="p-1 hover:bg-slate-200 text-slate-500 rounded print:hidden transition"
+                                  title="ስልክ ቅዳ"
+                                >
+                                  {isCopied ? (
+                                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                  ) : (
+                                    <Copy className="w-3.5 h-3.5 text-slate-400" />
+                                  )}
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 italic text-[11px]">- ስልክ የለም -</span>
+                            )}
+                          </td>
+
+                          {/* Residence */}
+                          <td className="py-2.5 px-3 text-slate-600">
+                            {child.residence || child.fellowshipOrVillage || '-'}
+                          </td>
+
+                          {/* Actions */}
+                          <td className="py-2.5 px-3 text-center print:hidden">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => openEditModal(child)}
+                                className="p-1.5 hover:bg-slate-100 text-slate-600 hover:text-blue-700 rounded-lg transition"
+                                title="አስተካክል"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setEnrollTargetChild(child);
-                                  setSelectedEnrollClass(classList[0] || 'ማቆያ ክፍል');
+                                  if (window.confirm(`"${child.name}" ከመረጃ ቋቱ ይሰረዝ?`)) {
+                                    onDeleteChild(child.id);
+                                  }
                                 }}
-                                className="text-[11px] text-blue-700 hover:text-blue-900 font-bold hover:underline print:hidden flex items-center gap-0.5"
-                                title="ይህን ልጅ ወደ ሰንበት ት/ቤት መዝግብ"
+                                className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition"
+                                title="ሰርዝ"
                               >
-                                <span>መዝግብ</span>
-                                <ChevronRight className="w-3 h-3" />
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
-                          )}
-                        </td>
-
-                        {/* Parent / Guardian Name */}
-                        <td className="py-2.5 px-3 text-slate-700 font-medium">
-                          {child.parentName || '-'}
-                        </td>
-
-                        {/* Parent Phone Number with Quick Call & Copy */}
-                        <td className="py-2.5 px-3 text-slate-800 font-mono text-[11px]">
-                          {child.phone ? (
-                            <div className="flex items-center gap-1.5">
-                              <a
-                                href={`tel:${child.phone}`}
-                                className="inline-flex items-center gap-1 font-bold text-emerald-800 hover:text-emerald-950 hover:underline bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200 print:border-none print:bg-transparent print:p-0"
-                                title="ደውል"
-                              >
-                                <PhoneCall className="w-3 h-3 text-emerald-600 print:hidden shrink-0" />
-                                <span>{child.phone}</span>
-                              </a>
-                              <button
-                                type="button"
-                                onClick={() => handleCopyPhone(child.id, child.phone!)}
-                                className="p-1 hover:bg-slate-200 text-slate-500 rounded print:hidden transition"
-                                title="ስልክ ቅዳ"
-                              >
-                                {isCopied ? (
-                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                                ) : (
-                                  <Copy className="w-3.5 h-3.5 text-slate-400" />
-                                )}
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-slate-400 italic text-[11px]">- ስልክ የለም -</span>
-                          )}
-                        </td>
-
-                        {/* Residence */}
-                        <td className="py-2.5 px-3 text-slate-600">
-                          {child.residence || child.fellowshipOrVillage || '-'}
-                        </td>
-
-                        {/* Actions */}
-                        <td className="py-2.5 px-3 text-center print:hidden">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => openEditModal(child)}
-                              className="p-1.5 hover:bg-slate-100 text-slate-600 hover:text-blue-700 rounded-lg transition"
-                              title="አስተካክል"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (window.confirm(`"${child.name}" ከመረጃ ቋቱ ይሰረዝ?`)) {
-                                  onDeleteChild(child.id);
-                                }
-                              }}
-                              className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition"
-                              title="ሰርዝ"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      ) : (
+        ) ) : (
         /* Special View: Sunday School Students Missing From Church Children Registry */
         <div className="bg-white rounded-2xl border border-purple-200 shadow-sm overflow-hidden">
           <div className="p-4 bg-purple-50/70 border-b border-purple-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
