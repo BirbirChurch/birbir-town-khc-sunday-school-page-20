@@ -717,17 +717,45 @@ export default function App() {
     );
   };
 
-  const handleClearChurchChildren = (chapelFilter?: string) => {
+  const handleClearChurchChildren = (chapelFilter?: string | string[]) => {
     updateAppData(
       (prev) => {
-        if (chapelFilter && chapelFilter !== 'all') {
+        if (Array.isArray(chapelFilter) && chapelFilter.length > 0) {
+          const normTargets = chapelFilter.map((c) =>
+            (c || '').trim().toLowerCase().replace(/ቻፕል|አጥቢያ|ማዕከል/g, '').trim()
+          );
           return {
             ...prev,
-            churchChildren: (prev.churchChildren || []).filter(
-              (c) => (c.chapel || 'ዋናው ማዕከል ቻፕል') !== chapelFilter
-            )
+            churchChildren: (prev.churchChildren || []).filter((child) => {
+              const chNorm = (child.chapel || 'ዋናው ማዕከል ቻፕል')
+                .trim()
+                .toLowerCase()
+                .replace(/ቻፕል|አጥቢያ|ማዕከል/g, '')
+                .trim();
+              return !normTargets.includes(chNorm);
+            })
           };
         }
+
+        if (typeof chapelFilter === 'string' && chapelFilter && chapelFilter !== 'all') {
+          const normTarget = chapelFilter
+            .trim()
+            .toLowerCase()
+            .replace(/ቻፕል|አጥቢያ|ማዕከል/g, '')
+            .trim();
+          return {
+            ...prev,
+            churchChildren: (prev.churchChildren || []).filter((child) => {
+              const chNorm = (child.chapel || 'ዋናው ማዕከል ቻፕል')
+                .trim()
+                .toLowerCase()
+                .replace(/ቻፕል|አጥቢያ|ማዕከል/g, '')
+                .trim();
+              return chNorm !== normTarget;
+            })
+          };
+        }
+
         return {
           ...prev,
           churchChildren: []
