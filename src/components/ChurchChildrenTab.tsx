@@ -53,6 +53,7 @@ interface ChurchChildrenTabProps {
     students: { name: string; gender: string; age: number | string; className: string; chapel?: string; phone?: string }[]
   ) => void;
   currentUserRole: Role | null;
+  loggedInChapel?: string | null;
 }
 
 // Normalization function to match Amharic names accurately
@@ -234,18 +235,27 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
   onBatchAddChildren,
   onEnrollToSundaySchool,
   onImportMissingStudentsToChurchChildren,
-  currentUserRole
+  currentUserRole,
+  loggedInChapel
 }) => {
   // State
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [viewFilter, setViewFilter] = useState<ViewFilter>('all');
   const [ageFilter, setAgeFilter] = useState<AgeFilter>('all');
   const [genderFilter, setGenderFilter] = useState<string>('all');
-  const [selectedChapelFilter, setSelectedChapelFilter] = useState<string>('all');
+  const [selectedChapelFilter, setSelectedChapelFilter] = useState<string>(loggedInChapel || 'all');
   // Multi-Chapel Filtering for Main Registry Tab
-  const [selectedChapels, setSelectedChapels] = useState<string[]>([]);
+  const [selectedChapels, setSelectedChapels] = useState<string[]>(loggedInChapel ? [loggedInChapel] : []);
   const [displayLayoutMode, setDisplayLayoutMode] = useState<'table' | 'grouped_chapels'>('table');
   const [copiedPhoneId, setCopiedPhoneId] = useState<number | null>(null);
+
+  // Sync loggedInChapel when selected chapel changes
+  React.useEffect(() => {
+    if (loggedInChapel) {
+      setSelectedChapelFilter(loggedInChapel);
+      setSelectedChapels([loggedInChapel]);
+    }
+  }, [loggedInChapel]);
 
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);

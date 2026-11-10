@@ -142,21 +142,31 @@ export default function App() {
     []
   );
 
+  const [loggedInChapel, setLoggedInChapel] = useState<string | null>(null);
+
   // Handlers for Login
-  const handleLoginSuccess = (role: Role, teacher?: Teacher) => {
+  const handleLoginSuccess = (role: Role, teacher?: Teacher, chapel?: string) => {
     setCurrentUserRole(role);
     if (role === 'teacher' && teacher) {
       setLoggedInTeacher(teacher);
       setSelectedClass(teacher.assignedClass);
+      setLoggedInChapel(null);
+      setActiveTab('classesTab');
     } else {
       setLoggedInTeacher(null);
+      setLoggedInChapel(chapel || null);
+      if (chapel) {
+        setActiveTab('churchChildrenTab');
+      } else {
+        setActiveTab('classesTab');
+      }
     }
-    setActiveTab('classesTab');
   };
 
   const handleLogout = () => {
     setCurrentUserRole(null);
     setLoggedInTeacher(null);
+    setLoggedInChapel(null);
     setActiveTab('classesTab');
   };
 
@@ -977,6 +987,7 @@ export default function App() {
         onAddYear={handleAddYear}
         currentUserRole={currentUserRole}
         loggedInTeacherName={loggedInTeacher?.name}
+        loggedInChapel={loggedInChapel}
         onLogout={handleLogout}
         syncStatus={syncStatus}
         onOpenSyncModal={() => setIsSyncModalOpen(true)}
@@ -1024,6 +1035,7 @@ export default function App() {
             teachers={appData.teachers}
             adminPin={appData.pins?.admin || '1234'}
             leaderPin={appData.pins?.leader || '5678'}
+            chapelList={appData.chapels || DEFAULT_CHAPELS}
             onLoginSuccess={handleLoginSuccess}
           />
         ) : (
@@ -1117,6 +1129,7 @@ export default function App() {
                   onEnrollToSundaySchool={handleEnrollChildToSundaySchool}
                   onImportMissingStudentsToChurchChildren={handleImportMissingStudentsToChurchChildren}
                   currentUserRole={currentUserRole}
+                  loggedInChapel={loggedInChapel}
                 />
               )}
 

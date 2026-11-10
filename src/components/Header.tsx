@@ -9,6 +9,7 @@ interface HeaderProps {
   onAddYear: (year: string) => void;
   currentUserRole: Role | null;
   loggedInTeacherName?: string;
+  loggedInChapel?: string | null;
   onLogout: () => void;
   syncStatus: 'connected' | 'saving' | 'offline' | 'error';
   onOpenSyncModal?: () => void;
@@ -21,6 +22,7 @@ export const Header: React.FC<HeaderProps> = ({
   onAddYear,
   currentUserRole,
   loggedInTeacherName,
+  loggedInChapel,
   onLogout,
   syncStatus,
   onOpenSyncModal
@@ -38,8 +40,11 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const getRoleLabel = () => {
-    if (currentUserRole === 'admin') return 'ዋና አስተባባሪ (Admin)';
-    if (currentUserRole === 'leader') return 'የሰንበት ት/ቤት መሪ (Leader)';
+    if (currentUserRole === 'admin') return 'ዋና ቤተክርስቲያን አስተባባሪ (Admin)';
+    if (currentUserRole === 'leader') {
+      if (loggedInChapel) return `🏛️ ${loggedInChapel} መሪ/ተወካይ`;
+      return 'ዋና ቤተክርስቲያን መሪ (Leader)';
+    }
     if (currentUserRole === 'teacher') return `መምህር፦ ${loggedInTeacherName || ''}`;
     return 'ያልገቡ';
   };
