@@ -727,7 +727,7 @@ export default function App() {
           return {
             ...prev,
             churchChildren: (prev.churchChildren || []).filter((child) => {
-              const chNorm = (child.chapel || 'ዋናው ማዕከል ቻፕል')
+              const chNorm = (child.chapel || 'ኤልሮኢ ቻፕል')
                 .trim()
                 .toLowerCase()
                 .replace(/ቻፕል|አጥቢያ|ማዕከል/g, '')
@@ -746,7 +746,7 @@ export default function App() {
           return {
             ...prev,
             churchChildren: (prev.churchChildren || []).filter((child) => {
-              const chNorm = (child.chapel || 'ዋናው ማዕከል ቻፕል')
+              const chNorm = (child.chapel || 'ኤልሮኢ ቻፕል')
                 .trim()
                 .toLowerCase()
                 .replace(/ቻፕል|አጥቢያ|ማዕከል/g, '')
