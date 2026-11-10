@@ -4,6 +4,7 @@
  */
 
 import { AppData, Student, AbsenteeRecord, ChoirMember, SpiritualMember, Teacher, AnnualPlanItem, ChurchChild } from '../types';
+import { DEFAULT_CHAPELS } from '../constants/initialData';
 
 let _lastUniqueId = Math.max(Date.now(), 1792849000000);
 
@@ -115,12 +116,35 @@ export const sanitizeAndDeduplicateAppData = (data: AppData): AppData => {
       })
     : [];
 
-  // 7. Sanitize churchChildren
+  // 7. Sanitize & upgrade chapels list to DEFAULT_CHAPELS if old legacy list detected
+  let sanitizedChapels = Array.isArray(data.chapels) ? data.chapels : [];
+  if (
+    sanitizedChapels.length === 0 ||
+    sanitizedChapels.includes("ዋናው ማዕከል ቻፕል") ||
+    sanitizedChapels.includes("ሰላም ቻፕል") ||
+    !sanitizedChapels.includes("ኤልሮኢ ቻፕል")
+  ) {
+    sanitizedChapels = DEFAULT_CHAPELS;
+    modified = true;
+  }
+
+  // Legacy chapel mapping for existing children in local state
+  const legacyMap: Record<string, string> = {
+    "ዋናው ማዕከል ቻፕል": "ኤልሮኢ ቻፕል",
+    "ሰላም ቻፕል": "ሻሎም ቻፕል",
+    "አማኑኤል ቻፕል": "ያህዌ ቻፕል",
+    "ጽዮን ቻፕል": "አቤንኤዘር ቻፕል",
+    "ገነት ቻፕል": "አዶናይ ቻፕል"
+  };
+
+  // 8. Sanitize churchChildren
   const sanitizedChurchChildren: ChurchChild[] = Array.isArray(data.churchChildren)
     ? data.churchChildren.map((c) => {
         const checkedId = ensureUniqueId(c?.id);
-        if (checkedId !== c?.id) {
-          return { ...c, id: checkedId };
+        const mappedChapel = (c?.chapel && legacyMap[c.chapel]) ? legacyMap[c.chapel] : c?.chapel;
+        if (checkedId !== c?.id || mappedChapel !== c?.chapel) {
+          modified = true;
+          return { ...c, id: checkedId, chapel: mappedChapel || DEFAULT_CHAPELS[0] };
         }
         return c;
       })
@@ -140,6 +164,7 @@ export const sanitizeAndDeduplicateAppData = (data: AppData): AppData => {
     spiritualMembers: sanitizedSpiritual,
     teachers: sanitizedTeachers,
     plans: sanitizedPlans,
+    chapels: sanitizedChapels,
     churchChildren: sanitizedChurchChildren
   };
 };
