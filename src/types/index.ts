@@ -99,12 +99,14 @@ export interface ChurchChild {
   id: number;
   name: string; // የልጁ ሙሉ ስም
   gender: 'ወ' | 'ሴ' | string; // ጾታ
-  age: number | string; // ዕድሜ
+  age: number | string; // ዕድሜ (0-14)
   educationLevel?: string; // የትምህርት ደረጃ (e.g., ኬጂ፣ 1ኛ ክፍል፣ 2ኛ ክፍል፣ ወዘተ)
   occupation?: string; // የስራ ዓይነት (e.g., ተማሪ፣ የቤት ውስጥ፣ ወዘተ)
   chapel?: string; // ቻፕል / አጥቢያ ማዕከል
   parentName?: string; // የወላጅ/አሳዳጊ ስም
   phone?: string; // የወላጅ ስልክ ቁጥር
+  parentPhone?: string; // የወላጅ ወይም የአሳዳጊ ስልክ ቁጥር (ከዋናው ፋይል የተያያዘ)
+  householdId?: string; // የቤተሰብ መለያ ቁጥር
   residence?: string; // መኖሪያ ቀበሌ/መንደር/ሰፈር
   fellowshipOrVillage?: string; // የህብረት/የቡድን ስም ወይም መንደር
   isBaptized?: boolean; // የተጠመቀ/ች (አማራጭ)
@@ -123,6 +125,8 @@ export interface ChurchMember {
   chapel?: string; // ያለበት የቻፕሉ ስም
   parentName?: string; // የወላጅ ስም / የአሳዳጊ ስም
   phone?: string; // ስልክ ቁጥር
+  parentPhone?: string; // የወላጅ ወይም የአሳዳጊ ስልክ ቁጥር
+  householdId?: string; // የቤተሰብ መለያ ቁጥር
   residence?: string; // መኖሪያ ቀበሌ / አካባቢ
   maritalStatus?: string; // የጋብቻ ሁኔታ
   familyRole?: string; // የቤተሰብ ድርሻ (አባት፣ እናት፣ ልጅ፣ ወዘተ)

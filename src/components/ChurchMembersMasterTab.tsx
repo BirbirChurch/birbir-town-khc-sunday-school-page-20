@@ -22,12 +22,48 @@ import {
   Copy,
   Check,
   Sparkles,
-  HeartHandshake
+  HeartHandshake,
+  Globe,
+  Layers
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { ChurchMember, ChurchChild, Role } from '../types';
 import { DEFAULT_CHAPELS } from '../constants/initialData';
 import { normalizeAmharicName, normalizeChapel, normalizeHeader, parseChildAge } from './ChurchChildrenTab';
+
+// Standardized Ethiopian phone number extraction and cleaning
+export const cleanPhoneNumber = (raw: any): string | undefined => {
+  if (!raw) return undefined;
+  const digits = String(raw).replace(/[\s\-\(\)\.]/g, '');
+  if (/^(\+?251|0)?[97]\d{8}$/.test(digits)) {
+    if (digits.startsWith('+251')) return '0' + digits.substring(4);
+    if (digits.startsWith('251')) return '0' + digits.substring(3);
+    if (digits.length === 9 && (digits.startsWith('9') || digits.startsWith('7'))) return '0' + digits;
+    return digits;
+  }
+  return undefined;
+};
+
+// Intelligently matches an Excel sheet name to one of the 10 chapels
+export const matchSheetNameToChapel = (sheetName: string, availableChapels: string[]): string => {
+  const normSheet = normalizeChapel(sheetName);
+  for (const ch of availableChapels) {
+    const normCh = normalizeChapel(ch);
+    if (normCh === normSheet || (normSheet.length > 2 && normCh.includes(normSheet)) || (normCh.length > 2 && normSheet.includes(normCh))) {
+      return ch;
+    }
+  }
+  for (const ch of DEFAULT_CHAPELS) {
+    const normCh = normalizeChapel(ch);
+    if (normCh === normSheet || (normSheet.length > 2 && normCh.includes(normSheet)) || (normCh.length > 2 && normSheet.includes(normCh))) {
+      return ch;
+    }
+  }
+  if (sheetName.includes('ቻፕል') || sheetName.includes('ማዕከል')) {
+    return sheetName.trim();
+  }
+  return `${sheetName.trim()} ቻፕል`;
+};
 
 interface ChurchMembersMasterTabProps {
   currentYear: string;
@@ -46,6 +82,14 @@ interface ChurchMembersMasterTabProps {
 
 type AgeGroupFilter = 'all' | 'children_0_14' | 'youth_15_29' | 'adults_30_59' | 'elders_60';
 
+export interface SheetImportConfig {
+  sheetName: string;
+  matchedChapel: string;
+  rowCount: number;
+  isSelected: boolean;
+  sampleName?: string;
+}
+
 export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
   currentYear,
   churchMembers = [],
@@ -60,6 +104,9 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
   onNavigateToChildrenTab,
   currentUserRole
 }) => {
+  // Main View Switcher: 'all_church' (አጠቃላይ የቤተክርስቲያን ቋት) vs 'chapels_repo' (የቻፕሎች መረጃ ቋት)
+  const [mainViewMode, setMainViewMode] = useState<'all_church' | 'chapels_repo'>('all_church');
+
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedChapel, setSelectedChapel] = useState<string>('all');
@@ -94,8 +141,13 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
   const [transferSelectedChapels, setTransferSelectedChapels] = useState<string[]>([]);
   const [transferOnlyNew, setTransferOnlyNew] = useState<boolean>(false);
 
-  // Import State
+  // Import State & Multi-Sheet Excel Engine
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const workbookRef = useRef<XLSX.WorkBook | null>(null);
+  const [workbookSheets, setWorkbookSheets] = useState<SheetImportConfig[]>([]);
+  const [activeImportSheetName, setActiveImportSheetName] = useState<string>('');
+  const [importAllSheetsAtOnce, setImportAllSheetsAtOnce] = useState<boolean>(true);
+
   const [importFileName, setImportFileName] = useState<string>('');
   const [importRawRows, setImportRawRows] = useState<any[][]>([]);
   const [importHeaderCols, setImportHeaderCols] = useState<{ index: number; label: string }[]>([]);
@@ -208,6 +260,19 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
           occ = ageNum <= 3 ? 'የቤት ውስጥ' : 'ተማሪ';
         }
 
+        // Direct parent phone linking from main church members database
+        let parentPhone = cleanPhoneNumber(m.parentPhone || m.phone);
+        if (!parentPhone && m.parentName) {
+          const normParent = normalizeAmharicName(m.parentName);
+          const foundParent = churchMembers.find((p) => {
+            const pNorm = normalizeAmharicName(p.name);
+            return (p.phone || p.parentPhone) && (pNorm === normParent || pNorm.includes(normParent) || normParent.includes(pNorm));
+          });
+          if (foundParent) {
+            parentPhone = cleanPhoneNumber(foundParent.parentPhone || foundParent.phone);
+          }
+        }
+
         list.push({
           memberId: m.id,
           name: m.name,
@@ -218,7 +283,8 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
           occupation: occ,
           chapel: m.chapel || chapelList[0] || 'ኤልሮኢ ቻፕል',
           parentName: m.parentName || undefined,
-          phone: m.phone || undefined,
+          phone: parentPhone || undefined,
+          parentPhone: parentPhone || undefined,
           residence: m.residence || undefined,
           fellowshipOrVillage: m.residence || undefined,
           notes: m.notes || `ከአጠቃላይ የቤተክርስቲያን ቋት የተዛወረ`,
@@ -367,6 +433,210 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
     setIsAddModalOpen(false);
   };
 
+  // Helper to parse any raw sheet rows into ChurchMember objects with intelligent parent phone resolution
+  const parseRowsToChurchMembers = (
+    rows: any[][],
+    hIdx: number,
+    mapping: {
+      nameIdx: number;
+      fatherIdx: number;
+      grandfatherIdx: number;
+      genderIdx: number;
+      ageIdx: number;
+      educationIdx: number;
+      occupationIdx: number;
+      chapelIdx: number;
+      parentIdx: number;
+      phoneIdx: number;
+      residenceIdx: number;
+      maritalIdx: number;
+    },
+    refYear: number,
+    ageMode: 'auto' | 'direct' | 'birthyear',
+    defChapel: string
+  ): Omit<ChurchMember, 'id'>[] => {
+    // PASS 1: Build an index of parents/adults and phone numbers in this sheet
+    const adultPhoneIndex: Record<string, string> = {};
+
+    for (let i = hIdx + 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || row.length === 0) continue;
+
+      let rawName = String(mapping.nameIdx !== -1 ? row[mapping.nameIdx] || '' : '').trim();
+      if (!rawName || rawName === 'ተ.ቁ' || rawName === 'ስም' || rawName.includes('ድምር')) continue;
+      if (mapping.fatherIdx !== -1 && row[mapping.fatherIdx]) {
+        const father = String(row[mapping.fatherIdx]).trim();
+        if (father && !rawName.includes(father)) rawName += ` ${father}`;
+      }
+      if (mapping.grandfatherIdx !== -1 && row[mapping.grandfatherIdx]) {
+        const gf = String(row[mapping.grandfatherIdx]).trim();
+        if (gf && !rawName.includes(gf)) rawName += ` ${gf}`;
+      }
+
+      // Check phone in this row
+      let rowPhone: string | undefined = undefined;
+      if (mapping.phoneIdx !== -1 && row[mapping.phoneIdx]) {
+        rowPhone = cleanPhoneNumber(row[mapping.phoneIdx]);
+      }
+      if (!rowPhone) {
+        for (let c = 0; c < row.length; c++) {
+          if (c === mapping.nameIdx || c === mapping.ageIdx || c === mapping.genderIdx) continue;
+          const cleaned = cleanPhoneNumber(row[c]);
+          if (cleaned) {
+            rowPhone = cleaned;
+            break;
+          }
+        }
+      }
+
+      if (rowPhone && rawName) {
+        const normName = normalizeAmharicName(rawName);
+        adultPhoneIndex[normName] = rowPhone;
+        const parts = normName.split(/\s+/);
+        if (parts.length >= 2) {
+          adultPhoneIndex[`${parts[0]} ${parts[1]}`] = rowPhone;
+        }
+      }
+    }
+
+    // PASS 2: Parse members and link parent phone directly to children
+    const membersList: Omit<ChurchMember, 'id'>[] = [];
+    let currentFamilyParentName: string = '';
+    let currentFamilyPhone: string = '';
+
+    for (let i = hIdx + 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || row.length === 0) continue;
+
+      let rawName = String(mapping.nameIdx !== -1 ? row[mapping.nameIdx] || '' : '').trim();
+      if (!rawName || rawName === 'ተ.ቁ' || rawName === 'ስም' || rawName.includes('ድምር') || rawName.includes('ጠቅላላ')) continue;
+
+      if (mapping.fatherIdx !== -1 && row[mapping.fatherIdx]) {
+        const father = String(row[mapping.fatherIdx]).trim();
+        if (father && !rawName.includes(father)) rawName += ` ${father}`;
+      }
+      if (mapping.grandfatherIdx !== -1 && row[mapping.grandfatherIdx]) {
+        const gf = String(row[mapping.grandfatherIdx]).trim();
+        if (gf && !rawName.includes(gf)) rawName += ` ${gf}`;
+      }
+
+      // Gender
+      const rawGender = String(mapping.genderIdx !== -1 ? row[mapping.genderIdx] || '' : '').trim();
+      const gender =
+        rawGender.startsWith('ሴ') || rawGender.toLowerCase().startsWith('f') || rawGender.toLowerCase().includes('female')
+          ? 'ሴ'
+          : 'ወ';
+
+      // Age calculation
+      const rawAgeVal = mapping.ageIdx !== -1 ? row[mapping.ageIdx] : undefined;
+      const parsedAge = parseChildAge(rawAgeVal, refYear, ageMode);
+      let calculatedAge = parsedAge.age !== -1 ? parsedAge.age : 25;
+      const numAge = typeof calculatedAge === 'number' ? calculatedAge : parseInt(String(calculatedAge), 10) || 0;
+      const isChild = numAge <= 14;
+
+      // Chapel
+      let chapel = mapping.chapelIdx !== -1 && row[mapping.chapelIdx] ? String(row[mapping.chapelIdx]).trim() : '';
+      if (!chapel) {
+        chapel = defChapel;
+      } else {
+        const chNorm = normalizeChapel(chapel);
+        const matched = chapelList.find(
+          (c) => normalizeChapel(c) === chNorm || c.includes(chapel) || chapel.includes(c)
+        );
+        if (matched) chapel = matched;
+        else if (!chapel.endsWith('ቻፕል') && !chapel.endsWith('ማዕከል')) chapel = `${chapel} ቻፕል`;
+      }
+
+      // Education & Occupation
+      let educationLevel = mapping.educationIdx !== -1 && row[mapping.educationIdx] ? String(row[mapping.educationIdx]).trim() : undefined;
+      if (!educationLevel) {
+        educationLevel = isChild ? (numAge < 6 ? 'ማቆያ/ኬጂ' : `${Math.min(8, Math.max(1, numAge - 6))}ኛ ክፍል`) : 'የተጠናቀቀ';
+      }
+
+      let occupation = mapping.occupationIdx !== -1 && row[mapping.occupationIdx] ? String(row[mapping.occupationIdx]).trim() : undefined;
+      if (!occupation) {
+        occupation = isChild ? (numAge < 5 ? 'የቤት ውስጥ' : 'ተማሪ') : 'የግል/መንግስት ሰራተኛ';
+      }
+
+      // Parent name
+      let parentName: string | undefined = undefined;
+      if (mapping.parentIdx !== -1 && row[mapping.parentIdx]) {
+        parentName = String(row[mapping.parentIdx]).trim();
+      } else if (mapping.fatherIdx !== -1 && row[mapping.fatherIdx]) {
+        const father = String(row[mapping.fatherIdx]).trim();
+        const gf = mapping.grandfatherIdx !== -1 && row[mapping.grandfatherIdx] ? String(row[mapping.grandfatherIdx]).trim() : '';
+        parentName = gf ? `${father} ${gf}` : father;
+      } else if (isChild) {
+        const parts = rawName.split(/\s+/);
+        if (parts.length >= 2) parentName = parts.slice(1).join(' ');
+      }
+
+      // Direct Phone
+      let phone: string | undefined = undefined;
+      if (mapping.phoneIdx !== -1 && row[mapping.phoneIdx]) {
+        phone = cleanPhoneNumber(row[mapping.phoneIdx]);
+      }
+      if (!phone) {
+        for (let c = 0; c < row.length; c++) {
+          if (c === mapping.nameIdx || c === mapping.ageIdx || c === mapping.genderIdx) continue;
+          const cleaned = cleanPhoneNumber(row[c]);
+          if (cleaned) { phone = cleaned; break; }
+        }
+      }
+
+      // Track family head
+      if (!isChild && phone) {
+        currentFamilyParentName = rawName;
+        currentFamilyPhone = phone;
+      }
+
+      // Intelligent Parent Phone Linking:
+      // If child doesn't have their own phone, link the parent's phone number directly
+      let parentPhone: string | undefined = undefined;
+      if (isChild) {
+        if (phone) {
+          parentPhone = phone;
+        } else {
+          if (parentName) {
+            const normP = normalizeAmharicName(parentName);
+            parentPhone = adultPhoneIndex[normP] || adultPhoneIndex[normP.split(/\s+/).slice(0, 2).join(' ')];
+          }
+          if (!parentPhone && currentFamilyPhone) {
+            parentPhone = currentFamilyPhone;
+            if (!parentName && currentFamilyParentName) parentName = currentFamilyParentName;
+          }
+          if (parentPhone) {
+            phone = parentPhone;
+          }
+        }
+      } else if (phone) {
+        parentPhone = phone;
+      }
+
+      const residence = mapping.residenceIdx !== -1 && row[mapping.residenceIdx] ? String(row[mapping.residenceIdx]).trim() : undefined;
+      const maritalStatus = mapping.maritalIdx !== -1 && row[mapping.maritalIdx] ? String(row[mapping.maritalIdx]).trim() : undefined;
+
+      membersList.push({
+        name: rawName,
+        gender,
+        age: calculatedAge,
+        birthYear: parsedAge.detectedBirthYear,
+        educationLevel,
+        occupation,
+        chapel,
+        parentName,
+        phone,
+        parentPhone,
+        residence,
+        maritalStatus,
+        familyRole: isChild ? 'ልጅ' : (gender === 'ሴ' ? 'እናት' : 'አባት'),
+        registeredDate: new Date().toISOString().split('T')[0]
+      });
+    }
+
+    return membersList;
+  };
+
   // Execute Excel Processing for Church Members
   const executeExcelProcessing = (
     rows: any[][],
@@ -389,112 +659,69 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
     ageMode: 'auto' | 'direct' | 'birthyear',
     defChapel: string
   ) => {
-    const membersList: Omit<ChurchMember, 'id'>[] = [];
-
-    for (let i = hIdx + 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (!row || row.length === 0) continue;
-
-      let rawName = String(mapping.nameIdx !== -1 ? row[mapping.nameIdx] || '' : '').trim();
-      if (!rawName || rawName === 'ተ.ቁ' || rawName === 'ስም' || rawName.includes('ድምር') || rawName.includes('ጠቅላላ')) continue;
-
-      // Concatenate separate father or grandfather name
-      if (mapping.fatherIdx !== -1 && row[mapping.fatherIdx]) {
-        const father = String(row[mapping.fatherIdx]).trim();
-        if (father && !rawName.includes(father)) {
-          rawName += ` ${father}`;
-        }
-      }
-      if (mapping.grandfatherIdx !== -1 && row[mapping.grandfatherIdx]) {
-        const gf = String(row[mapping.grandfatherIdx]).trim();
-        if (gf && !rawName.includes(gf)) {
-          rawName += ` ${gf}`;
-        }
-      }
-
-      // Gender
-      const rawGender = String(mapping.genderIdx !== -1 ? row[mapping.genderIdx] || '' : '').trim();
-      const gender =
-        rawGender.startsWith('ሴ') || rawGender.toLowerCase().startsWith('f') || rawGender.toLowerCase().includes('female')
-          ? 'ሴ'
-          : 'ወ';
-
-      // Age calculation
-      const rawAgeVal = mapping.ageIdx !== -1 ? row[mapping.ageIdx] : undefined;
-      const parsedAge = parseChildAge(rawAgeVal, refYear, ageMode);
-      let calculatedAge = parsedAge.age !== -1 ? parsedAge.age : 25;
-
-      // Chapel
-      let chapel = mapping.chapelIdx !== -1 && row[mapping.chapelIdx] ? String(row[mapping.chapelIdx]).trim() : '';
-      if (!chapel) {
-        chapel = defChapel;
-      } else {
-        const chNorm = normalizeChapel(chapel);
-        const matched = chapelList.find(
-          (c) => normalizeChapel(c) === chNorm || c.includes(chapel) || chapel.includes(c)
-        );
-        if (matched) chapel = matched;
-        else if (!chapel.endsWith('ቻፕል') && !chapel.endsWith('ማዕከል')) chapel = `${chapel} ቻፕል`;
-      }
-
-      // Education & Occupation
-      const educationLevel = mapping.educationIdx !== -1 && row[mapping.educationIdx] ? String(row[mapping.educationIdx]).trim() : undefined;
-      const occupation = mapping.occupationIdx !== -1 && row[mapping.occupationIdx] ? String(row[mapping.occupationIdx]).trim() : undefined;
-
-      // Parent name
-      let parentName: string | undefined = undefined;
-      if (mapping.parentIdx !== -1 && row[mapping.parentIdx]) {
-        parentName = String(row[mapping.parentIdx]).trim();
-      } else if (mapping.fatherIdx !== -1 && row[mapping.fatherIdx]) {
-        const father = String(row[mapping.fatherIdx]).trim();
-        const gf = mapping.grandfatherIdx !== -1 && row[mapping.grandfatherIdx] ? String(row[mapping.grandfatherIdx]).trim() : '';
-        parentName = gf ? `${father} ${gf}` : father;
-      }
-
-      // Phone
-      let phone: string | undefined = undefined;
-      if (mapping.phoneIdx !== -1 && row[mapping.phoneIdx]) {
-        phone = String(row[mapping.phoneIdx]).trim();
-      } else {
-        for (let c = 0; c < row.length; c++) {
-          if (c === mapping.nameIdx || c === mapping.ageIdx || c === mapping.genderIdx) continue;
-          const val = String(row[c] || '').trim().replace(/[\s\-\(\)]/g, '');
-          if (/^(\+?251|0)?[97]\d{8}$/.test(val)) {
-            phone = val;
-            break;
-          }
-        }
-      }
-      if (phone) {
-        let cleanDigits = phone.replace(/[\s\-\(\)]/g, '');
-        if (cleanDigits.startsWith('+251')) cleanDigits = '0' + cleanDigits.substring(4);
-        else if (cleanDigits.startsWith('251')) cleanDigits = '0' + cleanDigits.substring(3);
-        else if (cleanDigits.length === 9 && (cleanDigits.startsWith('9') || cleanDigits.startsWith('7'))) cleanDigits = '0' + cleanDigits;
-        phone = cleanDigits;
-      }
-
-      const residence = mapping.residenceIdx !== -1 && row[mapping.residenceIdx] ? String(row[mapping.residenceIdx]).trim() : undefined;
-      const maritalStatus = mapping.maritalIdx !== -1 && row[mapping.maritalIdx] ? String(row[mapping.maritalIdx]).trim() : undefined;
-
-      membersList.push({
-        name: rawName,
-        gender,
-        age: calculatedAge,
-        educationLevel,
-        occupation,
-        chapel,
-        parentName,
-        phone,
-        residence,
-        maritalStatus,
-        registeredDate: new Date().toISOString().split('T')[0]
-      });
-    }
-
-    setImportMembersPreview(membersList);
+    const list = parseRowsToChurchMembers(rows, hIdx, mapping, refYear, ageMode, defChapel);
+    setImportMembersPreview(list);
   };
 
-  // File Upload Handler
+  // Switch preview to another sheet in multi-sheet Excel workbook
+  const switchPreviewSheet = (sheetName: string) => {
+    if (!workbookRef.current) return;
+    const worksheet = workbookRef.current.Sheets[sheetName];
+    if (!worksheet) return;
+    const rows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+    if (!rows || rows.length < 2) return;
+
+    setActiveImportSheetName(sheetName);
+    const targetChapel = workbookSheets.find((s) => s.sheetName === sheetName)?.matchedChapel || importDefaultChapel;
+
+    let sHeaderIdx = 0;
+    for (let r = 0; r < Math.min(10, rows.length); r++) {
+      const rRow = rows[r] || [];
+      let m = 0;
+      rRow.forEach((col: any) => {
+        const str = normalizeHeader(String(col || ''));
+        if (str.includes('ስም') || str.includes('name')) m++;
+        if (str.includes('ጾታ') || str.includes('gender')) m++;
+      });
+      if (m >= 2) { sHeaderIdx = r; break; }
+    }
+
+    const headerRow = rows[sHeaderIdx] || [];
+    const headerCols = headerRow.map((col: any, idx: number) => ({
+      index: idx,
+      label: String(col || `አምድ ${idx + 1}`).trim()
+    }));
+
+    setImportRawRows(rows);
+    setImportHeaderCols(headerCols);
+    setImportHeaderRowIdx(sHeaderIdx);
+
+    const mapping = {
+      nameIdx: importColName,
+      fatherIdx: importColFather,
+      grandfatherIdx: importColGrandfather,
+      genderIdx: importColGender,
+      ageIdx: importColAge,
+      educationIdx: importColEducation,
+      occupationIdx: importColOccupation,
+      chapelIdx: importColChapel,
+      parentIdx: importColParent,
+      phoneIdx: importColPhone,
+      residenceIdx: importColResidence,
+      maritalIdx: importColMarital
+    };
+
+    executeExcelProcessing(
+      rows,
+      sHeaderIdx,
+      mapping,
+      importRefYear,
+      importAgeMode,
+      targetChapel
+    );
+  };
+
+  // File Upload Handler (Multi-Sheet Workbook Engine)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -506,7 +733,30 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
       try {
         const buffer = evt.target?.result;
         const workbook = XLSX.read(buffer, { type: 'binary' });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        workbookRef.current = workbook;
+
+        // Discover and configure all sheets in the workbook (e.g., all 10 chapel sheets)
+        const detectedSheets: SheetImportConfig[] = workbook.SheetNames.map((sName) => {
+          const s = workbook.Sheets[sName];
+          const sRows: any[][] = XLSX.utils.sheet_to_json(s, { header: 1 });
+          const matchedCh = matchSheetNameToChapel(sName, chapelList);
+          const sampleRow = sRows.find((r) => r && r.length > 0 && r.some((c: any) => String(c).trim().length > 3));
+          return {
+            sheetName: sName,
+            matchedChapel: matchedCh,
+            rowCount: Math.max(0, sRows.length - 1),
+            isSelected: true,
+            sampleName: sampleRow ? String(sampleRow[0] || sampleRow[1] || '').trim() : undefined
+          };
+        });
+
+        setWorkbookSheets(detectedSheets);
+        setImportAllSheetsAtOnce(detectedSheets.length > 1);
+
+        // Preview the first sheet
+        const previewSheetName = detectedSheets[0]?.sheetName || workbook.SheetNames[0];
+        setActiveImportSheetName(previewSheetName);
+        const sheet = workbook.Sheets[previewSheetName];
         const rawRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
         if (!rawRows || rawRows.length < 2) {
@@ -595,6 +845,9 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
         if (genderIdx === -1) genderIdx = Math.min(1, headerRow.length - 1);
         if (ageIdx === -1) ageIdx = Math.min(2, headerRow.length - 1);
 
+        const initialChapel = detectedSheets[0]?.matchedChapel || importDefaultChapel;
+        setImportDefaultChapel(initialChapel);
+
         setImportRawRows(rawRows);
         setImportHeaderCols(headerCols);
         setImportHeaderRowIdx(headerRowIndex);
@@ -630,7 +883,7 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
           },
           importRefYear,
           importAgeMode,
-          importDefaultChapel
+          initialChapel
         );
       } catch (err) {
         alert('ኤክሴል ፋይሉን በማንበብ ወቅት ስህተት አጋጥሟል!');
@@ -684,16 +937,71 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
     );
   };
 
+  // Confirm Import Handler: Imports all selected sheets or single preview sheet
   const handleConfirmImport = () => {
-    if (importMembersPreview.length === 0) return;
-    onBatchAddMembers(importMembersPreview, importMode);
+    const mapping = {
+      nameIdx: importColName,
+      fatherIdx: importColFather,
+      grandfatherIdx: importColGrandfather,
+      genderIdx: importColGender,
+      ageIdx: importColAge,
+      educationIdx: importColEducation,
+      occupationIdx: importColOccupation,
+      chapelIdx: importColChapel,
+      parentIdx: importColParent,
+      phoneIdx: importColPhone,
+      residenceIdx: importColResidence,
+      maritalIdx: importColMarital
+    };
+
+    let allMembersCombined: Omit<ChurchMember, 'id'>[] = [];
+
+    if (workbookRef.current && importAllSheetsAtOnce && workbookSheets.length > 0) {
+      const selectedSheets = workbookSheets.filter((s) => s.isSelected);
+      selectedSheets.forEach((sConfig) => {
+        const worksheet = workbookRef.current?.Sheets[sConfig.sheetName];
+        if (!worksheet) return;
+        const rows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        if (!rows || rows.length < 2) return;
+
+        let sHeaderIdx = 0;
+        for (let r = 0; r < Math.min(10, rows.length); r++) {
+          const rRow = rows[r] || [];
+          let m = 0;
+          rRow.forEach((col: any) => {
+            const str = normalizeHeader(String(col || ''));
+            if (str.includes('ስም') || str.includes('name')) m++;
+            if (str.includes('ጾታ') || str.includes('gender')) m++;
+            if (str.includes('እድሜ') || str.includes('age')) m++;
+          });
+          if (m >= 2) { sHeaderIdx = r; break; }
+        }
+
+        const sheetMembers = parseRowsToChurchMembers(
+          rows,
+          sHeaderIdx,
+          mapping,
+          importRefYear,
+          importAgeMode,
+          sConfig.matchedChapel
+        );
+        allMembersCombined = allMembersCombined.concat(sheetMembers);
+      });
+    } else {
+      allMembersCombined = importMembersPreview;
+    }
+
+    if (allMembersCombined.length === 0) return;
+
+    onBatchAddMembers(allMembersCombined, importMode);
     setIsImportModalOpen(false);
     setImportMembersPreview([]);
     setImportRawRows([]);
     setImportFileName('');
+    setWorkbookSheets([]);
   };
 
-  // Transfer 0-14 children to Children's Registry
+  // Transfer 0-14 children to Children's Registry with directly linked parent phone
   const handleExecuteTransfer = () => {
     if (transferFilteredChildren.length === 0) return;
 
@@ -705,10 +1013,11 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
       occupation: c.occupation,
       chapel: c.chapel,
       parentName: c.parentName,
-      phone: c.phone,
+      phone: c.phone || c.parentPhone,
+      parentPhone: c.parentPhone || c.phone,
       residence: c.residence,
       fellowshipOrVillage: c.fellowshipOrVillage,
-      notes: c.notes || 'ከአጠቃላይ የቤተክርስቲያን ቋት የተዛወረ',
+      notes: c.notes || `ከአጠቃላይ የቤተክርስቲያን ቋት የተዛወረ (${c.chapel})`,
       registeredDate: new Date().toISOString().split('T')[0]
     }));
 
@@ -802,9 +1111,45 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
                   አጠቃላይ የቤተክርስቲያን መረጃ ቋት (Church Master Database)
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  የቤተክርስቲያኒቱ ጠቅላላ አባላት መረጃ፣ የኤክሴል መጫኛ እና ከ0-14 ያሉ ልጆችን በቀጥታ ወደ ልጆች ቋት መለያ
+                  የ10ሩም ቻፕሎች ጠቅላላ አባላት፣ የቤተሰብ መረጃ፣ ኤክሴል መጫኛ እና ከ0-14 ያሉ ልጆችን በቀጥታ ወደ ልጆች ቋት መለያ
                 </p>
               </div>
+            </div>
+
+            {/* View Mode Switcher: Overall Master vs Chapel-by-Chapel Master */}
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 mt-3 w-fit">
+              <button
+                type="button"
+                onClick={() => {
+                  setMainViewMode('all_church');
+                  setSelectedChapel('all');
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  mainViewMode === 'all_church'
+                    ? 'bg-indigo-900 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span>🌐 አጠቃላይ የቤተክርስቲያን ቋት ({churchMembers.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMainViewMode('chapels_repo');
+                  if (selectedChapel === 'all') {
+                    setSelectedChapel(chapelList[0] || 'ኤልሮኢ ቻፕል');
+                  }
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  mainViewMode === 'chapels_repo'
+                    ? 'bg-indigo-900 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5 text-amber-300" />
+                <span>🏛️ የቻፕሎች መረጃ ቋት ({chapelList.length} ቻፕሎች)</span>
+              </button>
             </div>
           </div>
 
@@ -814,7 +1159,7 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
             <button
               type="button"
               onClick={() => {
-                setTransferSelectedChapels(chapelList);
+                setTransferSelectedChapels(selectedChapel === 'all' ? chapelList : [selectedChapel]);
                 setTransferOnlyNew(false);
                 setIsTransferModalOpen(true);
               }}
@@ -836,7 +1181,12 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
 
             <button
               type="button"
-              onClick={() => setIsImportModalOpen(true)}
+              onClick={() => {
+                if (mainViewMode === 'chapels_repo' && selectedChapel !== 'all') {
+                  setImportDefaultChapel(selectedChapel);
+                }
+                setIsImportModalOpen(true);
+              }}
               className="bg-blue-800 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow-sm cursor-pointer"
               title="የቤተክርስቲያን አባላት ኤክሴል ፋይል ጫን"
             >
@@ -876,6 +1226,132 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
         </div>
       </div>
 
+      {/* DEDICATED CHAPEL REPOSITORIES SECTION (የቻፕሎች መረጃ ቋት) */}
+      {mainViewMode === 'chapels_repo' && (
+        <div className="space-y-4">
+          {/* Chapel Picker Cards Grid (10 Chapels) */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3.5 mb-3.5 border-b border-slate-100">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                  <Church className="w-4 h-4 text-indigo-900" />
+                  <span>የቻፕሎች (አጥቢያዎች) ራሱን የቻለ መረጃ ቋት</span>
+                  <span className="bg-indigo-100 text-indigo-950 text-[11px] font-black px-2 py-0.5 rounded-full">
+                    {chapelList.length} ቻፕሎች
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  የሚፈልጉትን ቻፕል በመጫን የዚያን ቻፕል ሙሉ የቤተሰብ መረጃ፣ ከ0-14 ያሉ ልጆች እና የወላጅ ስልክ መመልከት ይችላሉ
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedChapel('all')}
+                  className={`text-xs font-bold px-3 py-1.5 rounded-xl transition cursor-pointer border ${
+                    selectedChapel === 'all'
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200'
+                  }`}
+                >
+                  ሁሉንም አሳይ
+                </button>
+              </div>
+            </div>
+
+            {/* 10 Chapel Cards Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+              {chapelList.map((ch) => {
+                const stats = memberStats.chapelMap[ch] || { total: 0, children: 0, adults: 0 };
+                const isSelected = selectedChapel === ch;
+                return (
+                  <button
+                    key={`chapel_portal_card_${ch}`}
+                    type="button"
+                    onClick={() => setSelectedChapel(ch)}
+                    className={`p-3.5 rounded-2xl border text-left transition cursor-pointer flex flex-col justify-between group ${
+                      isSelected
+                        ? 'bg-indigo-950 text-white border-indigo-950 shadow-md ring-2 ring-indigo-500/40'
+                        : 'bg-slate-50 hover:bg-indigo-50/60 border-slate-200 text-slate-800 hover:border-indigo-300'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-1">
+                      <span className="font-extrabold text-xs truncate leading-tight group-hover:text-indigo-900 transition-colors">
+                        🏛️ {ch}
+                      </span>
+                      {isSelected && <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0 mt-1" />}
+                    </div>
+
+                    <div className="mt-3 space-y-1">
+                      <div className="flex items-baseline justify-between text-xs">
+                        <span className={`font-semibold ${isSelected ? 'text-indigo-200' : 'text-slate-500'}`}>አባላት፦</span>
+                        <span className="font-black text-sm tabular-nums">{stats.total}</span>
+                      </div>
+                      <div className="flex items-baseline justify-between text-xs">
+                        <span className={`font-semibold ${isSelected ? 'text-emerald-300' : 'text-emerald-700'}`}>ልጆች (0-14)፦</span>
+                        <span className={`font-black text-xs px-1.5 py-0.2 rounded font-mono ${
+                          isSelected ? 'bg-amber-400 text-slate-950' : 'bg-emerald-100 text-emerald-900'
+                        }`}>
+                          👶 {stats.children}
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Chapel Command Banner for Active Chapel */}
+          <div className="bg-gradient-to-r from-indigo-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-4.5 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4 border border-indigo-500/30">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 border border-indigo-400/40 flex items-center justify-center shrink-0">
+                <Church className="w-6 h-6 text-amber-300" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="bg-amber-400 text-slate-950 font-black text-[11px] px-2.5 py-0.5 rounded-full">የቻፕሉ መረጃ ቋት</span>
+                  <h3 className="font-extrabold text-base sm:text-lg text-white">
+                    {selectedChapel === 'all' ? 'ሁሉም ቻፕሎች (አጠቃላይ)' : selectedChapel}
+                  </h3>
+                </div>
+                <p className="text-xs text-indigo-200/90 mt-1">
+                  በዚህ ቻፕል ውስጥ <strong>{filteredMembers.length} ጠቅላላ አባላት</strong> እና <strong>{filteredMembers.filter((m) => (parseInt(String(m.age || '0'), 10) || 0) <= 14).length} ልጆች</strong> (ዕድሜ 0-14) ይገኛሉ።
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setTransferSelectedChapels(selectedChapel === 'all' ? chapelList : [selectedChapel]);
+                  setTransferOnlyNew(false);
+                  setIsTransferModalOpen(true);
+                }}
+                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-3.5 py-2.5 rounded-xl transition shadow flex items-center gap-1.5 cursor-pointer hover:scale-[1.02]"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>👶 የዚህን ቻፕል ልጆች (0-14) ወደ ልጆች ቋት አስገባ</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setImportDefaultChapel(selectedChapel === 'all' ? chapelList[0] : selectedChapel);
+                  setIsImportModalOpen(true);
+                }}
+                className="bg-white/10 hover:bg-white/20 text-white font-bold text-xs px-3 py-2.5 rounded-xl border border-white/20 transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-amber-300" />
+                <span>📥 ለዚህ ቻፕል ኤክሴል ጫን</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Synchronized Children Transfer Banner */}
       <div className="bg-gradient-to-r from-emerald-900 via-teal-900 to-blue-950 text-white rounded-2xl p-4.5 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4 border border-emerald-500/30">
         <div className="flex items-center gap-3">
@@ -899,7 +1375,7 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
           <button
             type="button"
             onClick={() => {
-              setTransferSelectedChapels(chapelList);
+              setTransferSelectedChapels(selectedChapel === 'all' ? chapelList : [selectedChapel]);
               setTransferOnlyNew(false);
               setIsTransferModalOpen(true);
             }}
@@ -1454,6 +1930,113 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
                   .xlsx, .xls ወይም .csv ፋይሎች (ስም፣ ጾታ፣ ዕድሜ፣ ቻፕል፣ ስልክ፣ የስራ ዓይነት፣ የትምህርት ደረጃ)
                 </p>
               </div>
+
+              {/* Multi-Sheet Workbook Detection Panel (For 10 Chapels) */}
+              {workbookSheets.length > 1 && (
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-4 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-blue-200/60 pb-2.5">
+                    <div>
+                      <h4 className="font-extrabold text-xs text-blue-950 flex items-center gap-2">
+                        <Layers className="w-4 h-4 text-blue-700" />
+                        <span>የተገኙ {workbookSheets.length} የቻፕል ሉሆች (Sheets)</span>
+                        <span className="bg-blue-600 text-white font-black text-[10px] px-2 py-0.5 rounded-full">
+                          አስሩም ቻፕሎች ተለይተዋል
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-blue-800/80 mt-0.5">
+                        ፋይሉ ለእያንዳንዱ ቻፕል የተለየ ሉህ ይዟል። ሁሉንም በአንድ ጊዜ ማስገባት ወይም የተወሰኑትን መምረጥ ይችላሉ።
+                      </p>
+                    </div>
+
+                    <label className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-blue-300 font-extrabold text-xs text-blue-900 cursor-pointer shadow-2xs hover:bg-blue-50">
+                      <input
+                        type="checkbox"
+                        checked={importAllSheetsAtOnce}
+                        onChange={(e) => {
+                          const val = e.target.checked;
+                          setImportAllSheetsAtOnce(val);
+                          setWorkbookSheets((prev) => prev.map((s) => ({ ...s, isSelected: val })));
+                        }}
+                        className="rounded text-blue-600"
+                      />
+                      <span>✓ ሁሉንም ቻፕሎች በአንድ ጊዜ አስገባ ({workbookSheets.filter((s) => s.isSelected).length}/{workbookSheets.length})</span>
+                    </label>
+                  </div>
+
+                  {/* Sheets Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
+                    {workbookSheets.map((sConfig, idx) => {
+                      const isActivePreview = activeImportSheetName === sConfig.sheetName;
+                      return (
+                        <div
+                          key={`ws_sheet_${idx}`}
+                          className={`p-2.5 rounded-xl border transition flex flex-col justify-between ${
+                            isActivePreview
+                              ? 'bg-white border-blue-600 shadow-sm ring-2 ring-blue-500/20'
+                              : 'bg-white/80 border-blue-200/80 hover:bg-white'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-1.5">
+                            <label className="flex items-center gap-2 cursor-pointer font-bold text-xs text-slate-800 truncate">
+                              <input
+                                type="checkbox"
+                                checked={sConfig.isSelected}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  setWorkbookSheets((prev) =>
+                                    prev.map((s) => (s.sheetName === sConfig.sheetName ? { ...s, isSelected: checked } : s))
+                                  );
+                                }}
+                                className="rounded text-blue-600"
+                              />
+                              <span className="truncate" title={sConfig.sheetName}>
+                                📄 {sConfig.sheetName}
+                              </span>
+                            </label>
+                            <span className="text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-mono font-bold shrink-0">
+                              {sConfig.rowCount} መስመሮች
+                            </span>
+                          </div>
+
+                          <div className="mt-2 flex items-center justify-between gap-2 pt-1.5 border-t border-slate-100 text-[11px]">
+                            <div className="flex items-center gap-1 min-w-0">
+                              <span className="text-slate-400 shrink-0">ቻፕል፦</span>
+                              <select
+                                value={sConfig.matchedChapel}
+                                onChange={(e) => {
+                                  const newCh = e.target.value;
+                                  setWorkbookSheets((prev) =>
+                                    prev.map((s) => (s.sheetName === sConfig.sheetName ? { ...s, matchedChapel: newCh } : s))
+                                  );
+                                }}
+                                className="text-[11px] font-bold text-indigo-950 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 truncate"
+                              >
+                                {chapelList.map((ch) => (
+                                  <option key={`ch_map_${ch}`} value={ch}>
+                                    {ch}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => switchPreviewSheet(sConfig.sheetName)}
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded cursor-pointer transition shrink-0 ${
+                                isActivePreview
+                                  ? 'bg-blue-600 text-white'
+                                  : 'text-blue-700 hover:bg-blue-100'
+                              }`}
+                            >
+                              {isActivePreview ? 'የሚታይ ሉህ' : 'አምዶችን አሳይ'}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Column Mapping Panel */}
               {importMembersPreview.length > 0 && (

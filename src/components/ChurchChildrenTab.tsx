@@ -978,6 +978,38 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
         phone = cleanDigits;
       }
 
+      // If child doesn't have a phone, link parent's phone number from the sheet
+      let parentPhone = phone;
+      if (!phone && parentName) {
+        const normP = normalizeAmharicName(parentName);
+        for (let r = hIdx + 1; r < rows.length; r++) {
+          const adultRow = rows[r];
+          if (!adultRow) continue;
+          const aName = normalizeAmharicName(String(mapping.nameIdx !== -1 ? adultRow[mapping.nameIdx] || '' : ''));
+          if (aName === normP || aName.includes(normP) || normP.includes(aName)) {
+            let aPhone: string | undefined = undefined;
+            if (mapping.phoneIdx !== -1 && adultRow[mapping.phoneIdx]) {
+              aPhone = String(adultRow[mapping.phoneIdx]).trim();
+            } else {
+              for (let c = 0; c < adultRow.length; c++) {
+                if (c === mapping.nameIdx || c === mapping.ageIdx) continue;
+                const v = String(adultRow[c] || '').trim().replace(/[\s\-\(\)]/g, '');
+                if (/^(\+?251|0)?[97]\d{8}$/.test(v)) { aPhone = v; break; }
+              }
+            }
+            if (aPhone) {
+              let cl = aPhone.replace(/[\s\-\(\)]/g, '');
+              if (cl.startsWith('+251')) cl = '0' + cl.substring(4);
+              else if (cl.startsWith('251')) cl = '0' + cl.substring(3);
+              else if (cl.length === 9 && (cl.startsWith('9') || cl.startsWith('7'))) cl = '0' + cl;
+              phone = cl;
+              parentPhone = cl;
+              break;
+            }
+          }
+        }
+      }
+
       const residence = mapping.residenceIdx !== -1 && row[mapping.residenceIdx] ? String(row[mapping.residenceIdx]).trim() : undefined;
 
       childrenList.push({
@@ -989,6 +1021,7 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
         chapel,
         parentName,
         phone,
+        parentPhone,
         residence,
         fellowshipOrVillage: residence,
         registeredDate: new Date().toISOString().split('T')[0]
@@ -2066,13 +2099,13 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
                                 </td>
                                 <td className="py-2 px-3 text-slate-700">{child.parentName || '-'}</td>
                                 <td className="py-2 px-3 font-mono text-[11px]">
-                                  {child.phone ? (
+                                  {child.parentPhone || child.phone ? (
                                     <div className="flex items-center gap-1">
-                                      <a href={`tel:${child.phone}`} className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 hover:underline">
+                                      <a href={`tel:${child.parentPhone || child.phone}`} className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 hover:underline">
                                         <PhoneCall className="w-3 h-3 text-emerald-600" />
-                                        <span>{child.phone}</span>
+                                        <span>{child.parentPhone || child.phone}</span>
                                       </a>
-                                      <button type="button" onClick={() => handleCopyPhone(child.id, child.phone!)} className="p-1 text-slate-400 hover:text-slate-600">
+                                      <button type="button" onClick={() => handleCopyPhone(child.id, (child.parentPhone || child.phone)!)} className="p-1 text-slate-400 hover:text-slate-600">
                                         {isCopied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
                                       </button>
                                     </div>
@@ -2229,21 +2262,21 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
                             {child.parentName || '-'}
                           </td>
 
-                          {/* Parent Phone Number with Quick Call & Copy */}
+                          {/* Parent Phone Number with Quick Call & Copy (Directly linked from main file) */}
                           <td className="py-2.5 px-3 text-slate-800 font-mono text-[11px]">
-                            {child.phone ? (
+                            {child.parentPhone || child.phone ? (
                               <div className="flex items-center gap-1.5">
                                 <a
-                                  href={`tel:${child.phone}`}
+                                  href={`tel:${child.parentPhone || child.phone}`}
                                   className="inline-flex items-center gap-1 font-bold text-emerald-800 hover:text-emerald-950 hover:underline bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200 print:border-none print:bg-transparent print:p-0"
                                   title="ደውል"
                                 >
                                   <PhoneCall className="w-3 h-3 text-emerald-600 print:hidden shrink-0" />
-                                  <span>{child.phone}</span>
+                                  <span>{child.parentPhone || child.phone}</span>
                                 </a>
                                 <button
                                   type="button"
-                                  onClick={() => handleCopyPhone(child.id, child.phone!)}
+                                  onClick={() => handleCopyPhone(child.id, (child.parentPhone || child.phone)!)}
                                   className="p-1 hover:bg-slate-200 text-slate-500 rounded print:hidden transition"
                                   title="ስልክ ቅዳ"
                                 >
