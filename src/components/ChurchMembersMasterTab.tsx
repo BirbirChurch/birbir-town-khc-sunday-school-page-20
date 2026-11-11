@@ -937,8 +937,13 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
     );
   };
 
-  // Confirm Import Handler: Imports all selected sheets or single preview sheet
-  const handleConfirmImport = () => {
+  const totalRowsAcrossAllSheets = useMemo(() => {
+    if (!workbookSheets || workbookSheets.length === 0) return importMembersPreview.length;
+    return workbookSheets.reduce((sum, s) => sum + (s.rowCount || 0), 0);
+  }, [workbookSheets, importMembersPreview.length]);
+
+  // Import ALL Chapels from all sheets in the Excel workbook
+  const handleConfirmImportAllChapels = () => {
     const mapping = {
       nameIdx: importColName,
       fatherIdx: importColFather,
@@ -956,9 +961,8 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
 
     let allMembersCombined: Omit<ChurchMember, 'id'>[] = [];
 
-    if (workbookRef.current && importAllSheetsAtOnce && workbookSheets.length > 0) {
-      const selectedSheets = workbookSheets.filter((s) => s.isSelected);
-      selectedSheets.forEach((sConfig) => {
+    if (workbookRef.current && workbookSheets.length > 0) {
+      workbookSheets.forEach((sConfig) => {
         const worksheet = workbookRef.current?.Sheets[sConfig.sheetName];
         if (!worksheet) return;
         const rows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
@@ -999,6 +1003,26 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
     setImportRawRows([]);
     setImportFileName('');
     setWorkbookSheets([]);
+  };
+
+  // Import Only the currently active single sheet
+  const handleConfirmImportSingleSheet = () => {
+    if (importMembersPreview.length === 0) return;
+    onBatchAddMembers(importMembersPreview, importMode);
+    setIsImportModalOpen(false);
+    setImportMembersPreview([]);
+    setImportRawRows([]);
+    setImportFileName('');
+    setWorkbookSheets([]);
+  };
+
+  // Confirm Import Handler: delegates to all chapels or single sheet
+  const handleConfirmImport = () => {
+    if (workbookSheets.length > 1 && importAllSheetsAtOnce) {
+      handleConfirmImportAllChapels();
+    } else {
+      handleConfirmImportSingleSheet();
+    }
   };
 
   // Transfer 0-14 children to Children's Registry with directly linked parent phone
@@ -1196,6 +1220,19 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
 
             <button
               type="button"
+              onClick={() => {
+                setImportAllSheetsAtOnce(true);
+                setIsImportModalOpen(true);
+              }}
+              className="bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-800 hover:to-indigo-800 text-white font-extrabold text-xs px-3.5 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow-sm cursor-pointer border border-blue-400/30 hover:scale-[1.01]"
+              title="የአስሩንም ቻፕሎች መረጃ የያዘውን ኤክሴል በቀጥታ ጫን"
+            >
+              <Layers className="w-4 h-4 text-amber-300" />
+              <span>🏛️ ሁሉንም ቻፕል ጫን</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleExportExcel}
               className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs px-3 py-2.5 rounded-xl transition flex items-center gap-1.5 border border-slate-200 cursor-pointer"
               title="ሙሉ መረጃውን በExcel አውርድ"
@@ -1346,6 +1383,19 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
               >
                 <FileSpreadsheet className="w-3.5 h-3.5 text-amber-300" />
                 <span>📥 ለዚህ ቻፕል ኤክሴል ጫን</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setImportAllSheetsAtOnce(true);
+                  setIsImportModalOpen(true);
+                }}
+                className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs px-3.5 py-2.5 rounded-xl transition shadow flex items-center gap-1.5 cursor-pointer hover:scale-[1.02]"
+                title="የአስሩንም ቻፕል መረጃ በአንድ ጊዜ ጫን"
+              >
+                <Layers className="w-3.5 h-3.5 text-slate-950" />
+                <span>🏛️ ሁሉንም ቻፕል ጫን</span>
               </button>
             </div>
           </div>
@@ -1948,19 +1998,31 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
                       </p>
                     </div>
 
-                    <label className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-blue-300 font-extrabold text-xs text-blue-900 cursor-pointer shadow-2xs hover:bg-blue-50">
-                      <input
-                        type="checkbox"
-                        checked={importAllSheetsAtOnce}
-                        onChange={(e) => {
-                          const val = e.target.checked;
-                          setImportAllSheetsAtOnce(val);
-                          setWorkbookSheets((prev) => prev.map((s) => ({ ...s, isSelected: val })));
-                        }}
-                        className="rounded text-blue-600"
-                      />
-                      <span>✓ ሁሉንም ቻፕሎች በአንድ ጊዜ አስገባ ({workbookSheets.filter((s) => s.isSelected).length}/{workbookSheets.length})</span>
-                    </label>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <label className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-blue-300 font-extrabold text-xs text-blue-900 cursor-pointer shadow-2xs hover:bg-blue-50">
+                        <input
+                          type="checkbox"
+                          checked={importAllSheetsAtOnce}
+                          onChange={(e) => {
+                            const val = e.target.checked;
+                            setImportAllSheetsAtOnce(val);
+                            setWorkbookSheets((prev) => prev.map((s) => ({ ...s, isSelected: val })));
+                          }}
+                          className="rounded text-blue-600"
+                        />
+                        <span>✓ ሁሉንም ምረጥ ({workbookSheets.filter((s) => s.isSelected).length}/{workbookSheets.length})</span>
+                      </label>
+
+                      <button
+                        type="button"
+                        onClick={handleConfirmImportAllChapels}
+                        className="bg-indigo-900 hover:bg-indigo-800 text-white font-black text-xs px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+                        title="አስሩንም ቻፕሎች በአንድ ጠቅታ መዝግብ"
+                      >
+                        <Layers className="w-3.5 h-3.5 text-amber-300" />
+                        <span>🏛️ ሁሉንም ቻፕል ጫን</span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Sheets Grid */}
@@ -2286,22 +2348,41 @@ export const ChurchMembersMasterTab: React.FC<ChurchMembersMasterTabProps> = ({
                 </label>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
                   onClick={() => setIsImportModalOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 rounded-xl"
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 rounded-xl cursor-pointer"
                 >
                   ሰርዝ
                 </button>
+
+                {workbookSheets.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={handleConfirmImportSingleSheet}
+                    disabled={importMembersPreview.length === 0}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs px-3.5 py-2.5 rounded-xl transition border border-slate-300 flex items-center gap-1.5 cursor-pointer"
+                    title={`የተመረጠውን '${activeImportSheetName}' ሉህ ብቻ መዝግብ`}
+                  >
+                    <span>ይህንን ቻፕል ብቻ ጫን ({activeImportSheetName})</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
-                  onClick={handleConfirmImport}
-                  disabled={importMembersPreview.length === 0}
-                  className="bg-blue-900 hover:bg-blue-800 disabled:opacity-50 text-white font-black text-xs px-5 py-2.5 rounded-xl transition shadow flex items-center gap-1.5 cursor-pointer"
+                  onClick={handleConfirmImportAllChapels}
+                  disabled={importMembersPreview.length === 0 && (!workbookRef.current || workbookSheets.length === 0)}
+                  className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 hover:from-blue-800 hover:to-indigo-800 disabled:opacity-50 text-white font-black text-xs px-5 py-2.5 rounded-xl transition shadow-md flex items-center gap-2 cursor-pointer hover:scale-[1.01]"
+                  title="የሁሉንም ቻፕሎች መረጃ በአንድ ጊዜ ጫን"
                 >
-                  <CheckCircle2 className="w-4 h-4 text-amber-300" />
-                  <span>አባላትን መዝግብ ({importMembersPreview.length})</span>
+                  <Layers className="w-4 h-4 text-amber-300" />
+                  <span>
+                    🏛️ ሁሉንም ቻፕል ጫን{' '}
+                    {workbookSheets.length > 1
+                      ? `(${workbookSheets.length} ቻፕሎች / ~${totalRowsAcrossAllSheets} አባላት)`
+                      : `(${importMembersPreview.length} አባላት)`}
+                  </span>
                 </button>
               </div>
             </div>

@@ -29,7 +29,8 @@ import {
   PhoneCall,
   BookOpen,
   Briefcase,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Layers
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { ChurchChild, Student, Role } from '../types';
@@ -1417,11 +1418,21 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
             <button
               type="button"
               onClick={() => setIsImportModalOpen(true)}
-              className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm"
+              className="bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm cursor-pointer"
               title="ልጆችን ከExcel (.xlsx) ወይም CSV ፋይል አስገባ"
             >
               <FileSpreadsheet className="w-4 h-4" />
               <span>📥 ኤክሴል አስገባ</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsImportModalOpen(true)}
+              className="bg-gradient-to-r from-emerald-800 to-teal-900 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm border border-emerald-400/30 cursor-pointer hover:scale-[1.01]"
+              title="የአስሩንም ቻፕሎች ልጆች በአንድ ጊዜ ጫን"
+            >
+              <Layers className="w-4 h-4 text-amber-300" />
+              <span>🏛️ ሁሉንም ቻፕል ጫን</span>
             </button>
 
             <button
@@ -3122,9 +3133,10 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
                                 onClick={() =>
                                   setImportSelectedChapels(importChapelsSummary.map((ch) => ch.name))
                                 }
-                                className="text-[11px] font-bold text-blue-800 bg-white hover:bg-blue-100 px-2.5 py-1 rounded-lg border border-blue-300 transition"
+                                className="text-[11px] font-bold text-emerald-900 bg-white hover:bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-300 transition flex items-center gap-1 shadow-2xs cursor-pointer"
                               >
-                                ✓ ሁሉንም መዝግብ ({importChildrenPreview.length})
+                                <Layers className="w-3.5 h-3.5 text-emerald-700" />
+                                <span>🏛️ ሁሉንም ቻፕል ምረጥ ({importChildrenPreview.length})</span>
                               </button>
                             </div>
                           </div>
@@ -3325,7 +3337,7 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
                 )}
               </span>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
                   onClick={() => {
@@ -3336,21 +3348,43 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
                     setImportSelectedChapels([]);
                     setImportFileName('');
                   }}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 rounded-xl"
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 rounded-xl cursor-pointer"
                 >
                   ሰርዝ
                 </button>
+
+                {importChapelsSummary.length > 1 && importSelectedChapels.length > 0 && importSelectedChapels.length < importChapelsSummary.length && (
+                  <button
+                    type="button"
+                    disabled={displayedImportChildren.length === 0}
+                    onClick={handleConfirmImport}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs px-3.5 py-2.5 rounded-xl transition border border-slate-300 flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>የተመረጡትን ብቻ ጫን ({displayedImportChildren.length})</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
-                  disabled={displayedImportChildren.length === 0}
-                  onClick={handleConfirmImport}
-                  className="bg-emerald-700 hover:bg-emerald-600 disabled:bg-slate-300 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition shadow-xs flex items-center gap-2 cursor-pointer hover:scale-[1.01] active:scale-95"
+                  disabled={importChildrenPreview.length === 0}
+                  onClick={() => {
+                    onBatchAddChildren(importChildrenPreview, importMode);
+                    setIsImportModalOpen(false);
+                    setImportChildrenPreview([]);
+                    setImportAdultsSkipped([]);
+                    setImportTotalRows(0);
+                    setImportSelectedChapels([]);
+                    setImportFileName('');
+                  }}
+                  className="bg-gradient-to-r from-emerald-800 to-teal-900 hover:from-emerald-700 hover:to-teal-800 disabled:opacity-50 text-white font-black text-xs px-5 py-2.5 rounded-xl transition shadow-md flex items-center gap-2 cursor-pointer hover:scale-[1.01]"
+                  title="የሁሉንም ቻፕሎች ልጆች በአንድ ጊዜ ጫን"
                 >
-                  <CheckCircle2 className="w-4 h-4" />
+                  <Layers className="w-4 h-4 text-amber-300" />
                   <span>
-                    {displayedImportChildren.length > 0
-                      ? `📥 የተጣሩትን (${displayedImportChildren.length}) ልጆች አስገባ`
-                      : 'የተመረጠ ልጅ የለም'}
+                    🏛️ ሁሉንም ቻፕል ጫን{' '}
+                    {importChapelsSummary.length > 1
+                      ? `(${importChapelsSummary.length} ቻፕሎች / ${importChildrenPreview.length} ልጆች)`
+                      : `(${importChildrenPreview.length} ልጆች)`}
                   </span>
                 </button>
               </div>
