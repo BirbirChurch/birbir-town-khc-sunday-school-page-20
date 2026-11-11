@@ -3,7 +3,7 @@
  * Prevents timestamp collision even when called many times in the same millisecond or inside tight CSV import loops.
  */
 
-import { AppData, Student, AbsenteeRecord, ChoirMember, SpiritualMember, Teacher, AnnualPlanItem, ChurchChild } from '../types';
+import { AppData, Student, AbsenteeRecord, ChoirMember, SpiritualMember, Teacher, AnnualPlanItem, ChurchChild, ChurchMember } from '../types';
 import { DEFAULT_CHAPELS } from '../constants/initialData';
 
 let _lastUniqueId = Math.max(Date.now(), 1792849000000);
@@ -150,6 +150,19 @@ export const sanitizeAndDeduplicateAppData = (data: AppData): AppData => {
       })
     : [];
 
+  // 9. Sanitize churchMembers
+  const sanitizedChurchMembers: ChurchMember[] = Array.isArray(data.churchMembers)
+    ? data.churchMembers.map((m) => {
+        const checkedId = ensureUniqueId(m?.id);
+        const mappedChapel = (m?.chapel && legacyMap[m.chapel]) ? legacyMap[m.chapel] : m?.chapel;
+        if (checkedId !== m?.id || mappedChapel !== m?.chapel) {
+          modified = true;
+          return { ...m, id: checkedId, chapel: mappedChapel || DEFAULT_CHAPELS[0] };
+        }
+        return m;
+      })
+    : [];
+
   if (!modified) {
     return data;
   }
@@ -165,6 +178,7 @@ export const sanitizeAndDeduplicateAppData = (data: AppData): AppData => {
     teachers: sanitizedTeachers,
     plans: sanitizedPlans,
     chapels: sanitizedChapels,
-    churchChildren: sanitizedChurchChildren
+    churchChildren: sanitizedChurchChildren,
+    churchMembers: sanitizedChurchMembers
   };
 };

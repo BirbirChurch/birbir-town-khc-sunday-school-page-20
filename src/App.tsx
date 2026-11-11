@@ -14,7 +14,8 @@ import {
   UserCheck,
   BookMarked,
   Users,
-  HeartHandshake
+  HeartHandshake,
+  Church
 } from 'lucide-react';
 import {
   Role,
@@ -26,7 +27,8 @@ import {
   AnnualPlanItem,
   AppData,
   WeeklyAttendanceStatus,
-  ChurchChild
+  ChurchChild,
+  ChurchMember
 } from './types';
 import { CLASS_LIST, DEFAULT_ANNUAL_PLAN, DEFAULT_CHAPELS } from './constants/initialData';
 import { subscribeToAppData, syncAppDataToFirebase, saveToLocalStorage, countStudentsInData, exportBackupJSON } from './services/firebase';
@@ -36,6 +38,7 @@ import { LoginPortal } from './components/LoginPortal';
 import { ClassesTab } from './components/ClassesTab';
 import { AllStudentsMasterTab } from './components/AllStudentsMasterTab';
 import { ChurchChildrenTab } from './components/ChurchChildrenTab';
+import { ChurchMembersMasterTab } from './components/ChurchMembersMasterTab';
 import { AttendanceTab } from './components/AttendanceTab';
 import { ChoirTab } from './components/ChoirTab';
 import { SpiritualTab } from './components/SpiritualTab';
@@ -858,10 +861,17 @@ export default function App() {
           }
           return child;
         });
+        const updatedMembers = (prev.churchMembers || []).map((member) => {
+          if (member.chapel === chapelName) {
+            return { ...member, chapel: fallbackChapel };
+          }
+          return member;
+        });
         return {
           ...prev,
           chapels: updatedChapels.length > 0 ? updatedChapels : ['ዋናው ማዕከል ቻፕል'],
-          churchChildren: updatedChildren
+          churchChildren: updatedChildren,
+          churchMembers: updatedMembers
         };
       },
       { immediate: true }
@@ -882,6 +892,143 @@ export default function App() {
       },
       { immediate: true }
     );
+  };
+
+  // General Church Members Master Handlers
+  const handleAddChurchMember = (newMember: Omit<ChurchMember, 'id'>) => {
+    const memberWithId: ChurchMember = {
+      ...newMember,
+      id: generateUniqueId()
+    };
+    updateAppData(
+      (prev) => {
+        const existingChapels = new Set(prev.chapels || DEFAULT_CHAPELS);
+        const updatedChapels =
+          newMember.chapel && !existingChapels.has(newMember.chapel)
+            ? [...(prev.chapels || DEFAULT_CHAPELS), newMember.chapel]
+            : prev.chapels || DEFAULT_CHAPELS;
+
+        return {
+          ...prev,
+          chapels: updatedChapels,
+          churchMembers: [...(prev.churchMembers || []), memberWithId]
+        };
+      },
+      { immediate: true }
+    );
+  };
+
+  const handleUpdateChurchMember = (updatedMember: ChurchMember) => {
+    updateAppData((prev) => {
+      const existingChapels = new Set(prev.chapels || DEFAULT_CHAPELS);
+      const updatedChapels =
+        updatedMember.chapel && !existingChapels.has(updatedMember.chapel)
+          ? [...(prev.chapels || DEFAULT_CHAPELS), updatedMember.chapel]
+          : prev.chapels || DEFAULT_CHAPELS;
+
+      return {
+        ...prev,
+        chapels: updatedChapels,
+        churchMembers: (prev.churchMembers || []).map((m) =>
+          m.id === updatedMember.id ? updatedMember : m
+        )
+      };
+    });
+  };
+
+  const handleDeleteChurchMember = (id: number) => {
+    updateAppData((prev) => ({
+      ...prev,
+      churchMembers: (prev.churchMembers || []).filter((m) => m.id !== id)
+    }));
+  };
+
+  const handleBatchAddChurchMembers = (
+    members: Omit<ChurchMember, 'id'>[],
+    mode: 'append' | 'replace' = 'append'
+  ) => {
+    if (!members.length) return;
+    const withIds: ChurchMember[] = members.map((m) => ({
+      ...m,
+      id: generateUniqueId()
+    }));
+    updateAppData(
+      (prev) => {
+        const existingChapels = new Set(prev.chapels || DEFAULT_CHAPELS);
+        const newChapels: string[] = [];
+        members.forEach((m) => {
+          if (m.chapel && !existingChapels.has(m.chapel)) {
+            existingChapels.add(m.chapel);
+            newChapels.push(m.chapel);
+          }
+        });
+
+        const updatedChapels =
+          newChapels.length > 0
+            ? [...(prev.chapels || DEFAULT_CHAPELS), ...newChapels]
+            : prev.chapels || DEFAULT_CHAPELS;
+
+        return {
+          ...prev,
+          chapels: updatedChapels,
+          churchMembers: mode === 'replace' ? withIds : [...(prev.churchMembers || []), ...withIds]
+        };
+      },
+      { immediate: true }
+    );
+  };
+
+  const handleClearChurchMembers = (chapelFilter?: string | string[]) => {
+    updateAppData(
+      (prev) => {
+        if (Array.isArray(chapelFilter) && chapelFilter.length > 0) {
+          const normTargets = chapelFilter.map((c) =>
+            (c || '').trim().toLowerCase().replace(/ቻፕል|አጥቢያ|ማዕከል/g, '').trim()
+          );
+          return {
+            ...prev,
+            churchMembers: (prev.churchMembers || []).filter((m) => {
+              const chNorm = (m.chapel || 'ኤልሮኢ ቻፕል')
+                .trim()
+                .toLowerCase()
+                .replace(/ቻፕል|አጥቢያ|ማዕከል/g, '')
+                .trim();
+              return !normTargets.includes(chNorm);
+            })
+          };
+        }
+
+        if (typeof chapelFilter === 'string' && chapelFilter && chapelFilter !== 'all') {
+          const normTarget = chapelFilter
+            .trim()
+            .toLowerCase()
+            .replace(/ቻፕል|አጥቢያ|ማዕከል/g, '')
+            .trim();
+          return {
+            ...prev,
+            churchMembers: (prev.churchMembers || []).filter((m) => {
+              const chNorm = (m.chapel || 'ኤልሮኢ ቻፕል')
+                .trim()
+                .toLowerCase()
+                .replace(/ቻፕል|አጥቢያ|ማዕከል/g, '')
+                .trim();
+              return chNorm !== normTarget;
+            })
+          };
+        }
+
+        return {
+          ...prev,
+          churchMembers: []
+        };
+      },
+      { immediate: true }
+    );
+  };
+
+  const handleTransferChildrenToChurchChildren = (children: Omit<ChurchChild, 'id'>[]) => {
+    handleBatchAddChurchChildren(children, 'append');
+    setActiveTab('churchChildrenTab');
   };
 
   // Plan handlers
@@ -990,6 +1137,7 @@ export default function App() {
   const tabs = [
     { id: 'classesTab', label: 'የክፍል ደረጃዎች & ውጤት', icon: GraduationCap, roles: ['admin', 'leader', 'teacher'] },
     { id: 'allStudentsMasterTab', label: 'ሁሉንም የተመዘገቡ ተማሪዎች', icon: Users, roles: ['admin', 'leader'] },
+    { id: 'churchMembersMasterTab', label: 'አጠቃላይ የቤተክርስቲያን ቋት', icon: Church, roles: ['admin', 'leader'] },
     { id: 'churchChildrenTab', label: 'የቤተክርስቲያኒቱ የልጆች ቋት', icon: HeartHandshake, roles: ['admin', 'leader'] },
     { id: 'attendanceTab', label: 'የተማሪዎች አተንዳንስ & መቆጣጠሪያ', icon: CalendarCheck2, roles: ['admin', 'leader', 'teacher'] },
     { id: 'choirTab', label: 'የመዘምራንና ኪነ-ጥበብ ቡድኖች', icon: Music, roles: ['admin', 'leader', 'teacher'] },
@@ -1101,6 +1249,23 @@ export default function App() {
                     setSelectedClass(cName);
                     setActiveTab('classesTab');
                   }}
+                  currentUserRole={currentUserRole}
+                />
+              )}
+
+              {activeTab === 'churchMembersMasterTab' && (currentUserRole === 'admin' || currentUserRole === 'leader') && (
+                <ChurchMembersMasterTab
+                  currentYear={currentYear}
+                  churchMembers={appData.churchMembers || []}
+                  chapelList={appData.chapels || DEFAULT_CHAPELS}
+                  existingChurchChildren={appData.churchChildren || []}
+                  onAddMember={handleAddChurchMember}
+                  onUpdateMember={handleUpdateChurchMember}
+                  onDeleteMember={handleDeleteChurchMember}
+                  onClearChurchMembers={handleClearChurchMembers}
+                  onBatchAddMembers={handleBatchAddChurchMembers}
+                  onTransferChildrenToChurchChildren={handleTransferChildrenToChurchChildren}
+                  onNavigateToChildrenTab={() => setActiveTab('churchChildrenTab')}
                   currentUserRole={currentUserRole}
                 />
               )}

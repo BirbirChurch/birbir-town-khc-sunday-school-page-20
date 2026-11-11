@@ -232,7 +232,8 @@ export const loadStoredLocalData = (): AppData => {
       choirMembers: source.choirMembers || [],
       spiritualMembers: source.spiritualMembers || [],
       chapels: (source.chapels && source.chapels.length > 0) ? source.chapels : INITIAL_APP_DATA.chapels || [],
-      churchChildren: (source.churchChildren && source.churchChildren.length > 0) ? source.churchChildren : INITIAL_APP_DATA.churchChildren || []
+      churchChildren: (source.churchChildren && source.churchChildren.length > 0) ? source.churchChildren : INITIAL_APP_DATA.churchChildren || [],
+      churchMembers: (source.churchMembers && source.churchMembers.length > 0) ? source.churchMembers : INITIAL_APP_DATA.churchMembers || []
     };
 
     return sanitizeAndDeduplicateAppData(rawData);
@@ -349,6 +350,7 @@ export const subscribeToAppData = (
         spiritualMembers: (val.spiritualMembers && val.spiritualMembers.length > 0) ? val.spiritualMembers : currentLocal.spiritualMembers,
         chapels: (val.chapels && val.chapels.length > 0) ? val.chapels : currentLocal.chapels || [],
         churchChildren: (val.churchChildren && val.churchChildren.length > 0) ? val.churchChildren : currentLocal.churchChildren || [],
+        churchMembers: (val.churchMembers && val.churchMembers.length > 0) ? val.churchMembers : currentLocal.churchMembers || [],
         years: (val.years && val.years.length > 0) ? val.years : currentLocal.years
       };
 
@@ -601,7 +603,10 @@ export const importBackupJSON = (jsonString: string): AppData | null => {
         plans: parsed.plans || INITIAL_APP_DATA.plans,
         attendance: parsed.attendance || [],
         choirMembers: parsed.choirMembers || [],
-        spiritualMembers: parsed.spiritualMembers || []
+        spiritualMembers: parsed.spiritualMembers || [],
+        churchChildren: parsed.churchChildren || [],
+        churchMembers: parsed.churchMembers || [],
+        chapels: parsed.chapels || INITIAL_APP_DATA.chapels
       };
       saveToLocalStorage(validData);
       syncAppDataToFirebase(validData);

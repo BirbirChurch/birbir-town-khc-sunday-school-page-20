@@ -112,6 +112,24 @@ export interface ChurchChild {
   registeredDate?: string; // የተመዘገበበት ቀን
 }
 
+export interface ChurchMember {
+  id: number;
+  name: string; // ሙሉ ስም
+  gender: 'ወ' | 'ሴ' | string; // ጾታ
+  age?: number | string; // ዕድሜ
+  birthYear?: number | string; // የትውልድ ዓመት
+  educationLevel?: string; // የክፍል ደረጃ / የትምህርት ደረጃ
+  occupation?: string; // የስራ ዓይነት / ሙያ
+  chapel?: string; // ያለበት የቻፕሉ ስም
+  parentName?: string; // የወላጅ ስም / የአሳዳጊ ስም
+  phone?: string; // ስልክ ቁጥር
+  residence?: string; // መኖሪያ ቀበሌ / አካባቢ
+  maritalStatus?: string; // የጋብቻ ሁኔታ
+  familyRole?: string; // የቤተሰብ ድርሻ (አባት፣ እናት፣ ልጅ፣ ወዘተ)
+  notes?: string; // ማስታወሻ
+  registeredDate?: string; // የተመዘገበበት ቀን
+}
+
 export interface AppData {
   years: string[];
   pins: {
@@ -138,6 +156,7 @@ export interface AppData {
   };
   chapels?: string[];
   churchChildren?: ChurchChild[];
+  churchMembers?: ChurchMember[];
 }
 
 

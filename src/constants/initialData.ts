@@ -133,6 +133,28 @@ export const INITIAL_CHURCH_CHILDREN: ChurchChild[] = [
   { id: 120, name: "ኤልሳ አሰገደች", gender: "ሴ", age: 14, educationLevel: "8ኛ ክፍል", occupation: "ተማሪ", chapel: "አዶናይ ቻፕል", parentName: "አሰገደች አየለ", phone: "0988779900", residence: "ቀበሌ 03", fellowshipOrVillage: "ጽዮን ህብረት", notes: "", registeredDate: "2019-01-22" }
 ];
 
+export const INITIAL_CHURCH_MEMBERS = [
+  // አዋቂዎች (ወላጆችና የቤተሰብ አባላት)
+  { id: 201, name: "ዳዊት ታደሰ", gender: "ወ", age: 38, educationLevel: "ዲግሪ", occupation: "ነጋዴ", chapel: "ኤልሮኢ ቻፕል", phone: "0911223344", residence: "ቀበሌ 01", maritalStatus: "ያገባ", familyRole: "አባት", registeredDate: "2018-05-10" },
+  { id: 202, name: "ሳራ በቀለ", gender: "ሴ", age: 34, educationLevel: "ዲፕሎማ", occupation: "መምህርት", chapel: "ኤልሮኢ ቻፕል", phone: "0911223344", residence: "ቀበሌ 01", maritalStatus: "ያገባች", familyRole: "እናት", registeredDate: "2018-05-10" },
+  { id: 203, name: "ተስፋዬ በቀለ", gender: "ወ", age: 42, educationLevel: "12ኛ ያጠናቀቀ", occupation: "ነጋዴ", chapel: "ሻሎም ቻፕል", phone: "0922334455", residence: "ቀበሌ 02", maritalStatus: "ያገባ", familyRole: "አባት", registeredDate: "2018-06-15" },
+  { id: 204, name: "ሐና ዘውዴ", gender: "ሴ", age: 37, educationLevel: "ዲፕሎማ", occupation: "የቤት እመቤት", chapel: "ሻሎም ቻፕል", phone: "0922334455", residence: "ቀበሌ 02", maritalStatus: "ያገባች", familyRole: "እናት", registeredDate: "2018-06-15" },
+  { id: 205, name: "መሠረት ሌቃ", gender: "ወ", age: 45, educationLevel: "ዲግሪ", occupation: "የመንግስት ሰራተኛ", chapel: "ቤቴል ቻፕል", phone: "0933445566", residence: "ቀበሌ 01", maritalStatus: "ያገባ", familyRole: "አባት", registeredDate: "2018-07-20" },
+  { id: 206, name: "ማርታ ተክሌ", gender: "ሴ", age: 39, educationLevel: "ዲፕሎማ", occupation: "ነጋዴ", chapel: "ቤቴል ቻፕል", phone: "0933445566", residence: "ቀበሌ 01", maritalStatus: "ያገባች", familyRole: "እናት", registeredDate: "2018-07-20" },
+
+  // ወጣቶች (15-25 ዓመት)
+  { id: 207, name: "ኤርሚያስ ዳዊት", gender: "ወ", age: 19, educationLevel: "1ኛ ዓመት ዩኒቨርሲቲ", occupation: "ተማሪ", chapel: "ኤልሮኢ ቻፕል", parentName: "ዳዊት ታደሰ", phone: "0911556677", residence: "ቀበሌ 01", maritalStatus: "ያላገባ", familyRole: "ልጅ", registeredDate: "2018-05-10" },
+  { id: 208, name: "ሰሎሜ ተስፋዬ", gender: "ሴ", age: 17, educationLevel: "11ኛ ክፍል", occupation: "ተማሪ", chapel: "ሻሎም ቻፕል", parentName: "ተስፋዬ በቀለ", phone: "0922778899", residence: "ቀበሌ 02", maritalStatus: "ያላገባች", familyRole: "ልጅ", registeredDate: "2018-06-15" },
+
+  // ልጆች (0-14 ዓመት - ወደ ልጆች ቋት የሚዛወሩ)
+  { id: 209, name: "ዮናታን ዳዊት", gender: "ወ", age: 3, educationLevel: "ጨቅላ/ያልጀመረ", occupation: "የቤት ውስጥ", chapel: "ኤልሮኢ ቻፕል", parentName: "ዳዊት ታደሰ", phone: "0911223344", residence: "ቀበሌ 01", maritalStatus: "ህፃን", familyRole: "ልጅ", registeredDate: "2019-01-15" },
+  { id: 210, name: "ሩት ተስፋዬ", gender: "ሴ", age: 6, educationLevel: "መዋዕለ ሕፃናት (KG 3)", occupation: "ተማሪ", chapel: "ሻሎም ቻፕል", parentName: "ተስፋዬ በቀለ", phone: "0922334455", residence: "ቀበሌ 02", maritalStatus: "ህፃን", familyRole: "ልጅ", registeredDate: "2019-01-12" },
+  { id: 211, name: "አማኑኤል መሠረት", gender: "ወ", age: 8, educationLevel: "2ኛ ክፍል", occupation: "ተማሪ", chapel: "ቤቴል ቻፕል", parentName: "መሠረት ሌቃ", phone: "0933445566", residence: "ቀበሌ 01", maritalStatus: "ህፃን", familyRole: "ልጅ", registeredDate: "2019-01-18" },
+  { id: 212, name: "ራሔል አሸናፊ", gender: "ሴ", age: 10, educationLevel: "4ኛ ክፍል", occupation: "ተማሪ", chapel: "ያህዌ ቻፕል", parentName: "አሸናፊ ጫፋ", phone: "0922113344", residence: "ቀበሌ 01", maritalStatus: "ህፃን", familyRole: "ልጅ", registeredDate: "2019-01-10" },
+  { id: 213, name: "ዮሐንስ ምንተስኖት", gender: "ወ", age: 12, educationLevel: "6ኛ ክፍል", occupation: "ተማሪ", chapel: "ኤዴን ቻፕል", parentName: "ምንተስኖት መንግስቱ", phone: "0933224455", residence: "ቀበሌ 02", maritalStatus: "ህፃን", familyRole: "ልጅ", registeredDate: "2019-01-16" },
+  { id: 214, name: "ዳዊት መስፍን", gender: "ወ", age: 14, educationLevel: "8ኛ ክፍል", occupation: "ተማሪ", chapel: "ርኆቦት ቻፕል", parentName: "መስፍን ማንጁራ", phone: "0955446677", residence: "ቀበሌ 01", maritalStatus: "ህፃን", familyRole: "ልጅ", registeredDate: "2019-01-05" }
+];
+
 export const INITIAL_APP_DATA: AppData = {
   years: ["2019", "2020", "2021", "2022", "2023", "2024", "2025", "2026", "2027", "2028", "2029", "2030"],
   pins: {
@@ -156,6 +178,7 @@ export const INITIAL_APP_DATA: AppData = {
   plans: DEFAULT_ANNUAL_PLAN,
   students: {},
   chapels: DEFAULT_CHAPELS,
-  churchChildren: INITIAL_CHURCH_CHILDREN
+  churchChildren: INITIAL_CHURCH_CHILDREN,
+  churchMembers: INITIAL_CHURCH_MEMBERS
 };
 
