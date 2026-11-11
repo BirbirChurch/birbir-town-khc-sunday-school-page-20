@@ -5,8 +5,6 @@ import { DEFAULT_CHAPELS } from '../constants/initialData';
 
 interface LoginPortalProps {
   teachers: Teacher[];
-  adminPin?: string;
-  leaderPin?: string;
   chapelList?: string[];
   onLoginSuccess: (role: Role, teacher?: Teacher, chapel?: string) => void;
 }

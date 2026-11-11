@@ -54,7 +54,8 @@ interface ChurchChildrenTabProps {
   ) => void;
   currentUserRole: Role | null;
   loggedInChapel?: string | null;
-  onDeleteChapel?: (chapelName: string) => void;
+  onDeleteChapel?: (chapelName: string, reassignTo?: string) => void;
+  onAddChapel?: (newChapelName: string) => void;
 }
 
 // Normalization function to match Amharic names accurately
@@ -238,7 +239,8 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
   onImportMissingStudentsToChurchChildren,
   currentUserRole,
   loggedInChapel,
-  onDeleteChapel
+  onDeleteChapel,
+  onAddChapel
 }) => {
   // State
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -269,6 +271,11 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
   const [clearScope, setClearScope] = useState<'all' | 'selected'>('all');
   const [clearSelectedChapels, setClearSelectedChapels] = useState<string[]>([]);
   const [clearConfirmWord, setClearConfirmWord] = useState<string>('');
+  // Chapel Manager Modal
+  const [isChapelManagerOpen, setIsChapelManagerOpen] = useState<boolean>(false);
+  const [newChapelNameInput, setNewChapelNameInput] = useState<string>('');
+  const [chapelToDelete, setChapelToDelete] = useState<string | null>(null);
+  const [reassignTargetChapel, setReassignTargetChapel] = useState<string>(chapelList[0] || 'ዋናው ማዕከል ቻፕል');
 
   // Form state
   const [formName, setFormName] = useState<string>('');
@@ -316,15 +323,16 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
   // 1. Build an index of Sunday School students for fast cross-referencing
   const sundaySchoolIndex = useMemo(() => {
     const map = new Map<string, { student: Student; className: string }>();
-    const allStudentsList: { student: Student; className: string }[] = [];
+    const allStudentsList: { student: Student; className: string; norm: string; tokens: string[] }[] = [];
 
     Object.entries(studentsByClass).forEach(([className, students]) => {
       if (Array.isArray(students)) {
         students.forEach((s) => {
           if (s && s.name) {
             const norm = normalizeAmharicName(s.name);
+            const tokens = norm.split(' ').filter(Boolean);
             map.set(norm, { student: s, className });
-            allStudentsList.push({ student: s, className });
+            allStudentsList.push({ student: s, className, norm, tokens });
           }
         });
       }
@@ -333,11 +341,32 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
     return { map, allStudentsList };
   }, [studentsByClass]);
 
-  // 2. Identify Church Children enrollment status
+  // 2. Identify Church Children enrollment status (Exact normalized match + 2-name match + prefix match)
   const churchChildrenWithStatus = useMemo(() => {
     return churchChildren.map((child) => {
-      const norm = normalizeAmharicName(child.name);
-      const match = sundaySchoolIndex.map.get(norm);
+      const childNorm = normalizeAmharicName(child.name);
+      let match = sundaySchoolIndex.map.get(childNorm);
+
+      if (!match) {
+        const childTokens = childNorm.split(' ').filter(Boolean);
+        if (childTokens.length >= 2) {
+          const found = sundaySchoolIndex.allStudentsList.find((st) => {
+            if (st.tokens.length >= 2) {
+              if (childTokens[0] === st.tokens[0] && childTokens[1] === st.tokens[1]) {
+                return true;
+              }
+            }
+            if (st.norm.startsWith(childNorm) || childNorm.startsWith(st.norm)) {
+              return true;
+            }
+            return false;
+          });
+          if (found) {
+            match = { student: found.student, className: found.className };
+          }
+        }
+      }
+
       return {
         ...child,
         isEnrolled: !!match,
@@ -1402,6 +1431,18 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
               >
                 <Trash2 className="w-4 h-4 text-rose-600" />
                 <span>🧹 መረጃ አጽዳ</span>
+              </button>
+            )}
+
+            {onDeleteChapel && (currentUserRole === 'admin' || currentUserRole === 'leader') && (
+              <button
+                type="button"
+                onClick={() => setIsChapelManagerOpen(true)}
+                className="bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+                title="ቻፕሎችን ማስተዳደር፣ አዲስ መጨመር ወይም መደለዝ"
+              >
+                <Church className="w-4 h-4 text-white" />
+                <span>🏛️ የቻፕሎች ማስተዳደሪያ & መደለቻ</span>
               </button>
             )}
           </div>
@@ -2873,6 +2914,111 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
                           </select>
                         </div>
 
+                        {/* Education Level Column */}
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 mb-1">የክፍል ደረጃ (የትምህርት ደረጃ) አምድ፦</label>
+                          <select
+                            value={importColEducation}
+                            onChange={(e) => {
+                              const v = parseInt(e.target.value, 10);
+                              setImportColEducation(v);
+                              handleReapplyMapping({ educationIdx: v });
+                            }}
+                            className="w-full text-xs font-bold border border-slate-300 rounded-lg p-1.5 bg-white text-slate-800"
+                          >
+                            <option value={-1}>-- በፋይሉ የለም (በዕድሜ ይገመት) --</option>
+                            {importHeaderCols.map((c) => (
+                              <option key={`c_edu_${c.index}`} value={c.index}>
+                                {c.index + 1}. {c.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Occupation Column */}
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 mb-1">የስራ ዓይነት አምድ፦</label>
+                          <select
+                            value={importColOccupation}
+                            onChange={(e) => {
+                              const v = parseInt(e.target.value, 10);
+                              setImportColOccupation(v);
+                              handleReapplyMapping({ occupationIdx: v });
+                            }}
+                            className="w-full text-xs font-bold border border-slate-300 rounded-lg p-1.5 bg-white text-slate-800"
+                          >
+                            <option value={-1}>-- በፋይሉ የለም (ተማሪ/የቤት ውስጥ) --</option>
+                            {importHeaderCols.map((c) => (
+                              <option key={`c_occ_${c.index}`} value={c.index}>
+                                {c.index + 1}. {c.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Parent/Guardian Column */}
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 mb-1">የወላጅ/አሳዳጊ ስም አምድ፦</label>
+                          <select
+                            value={importColParent}
+                            onChange={(e) => {
+                              const v = parseInt(e.target.value, 10);
+                              setImportColParent(v);
+                              handleReapplyMapping({ parentIdx: v });
+                            }}
+                            className="w-full text-xs font-bold border border-slate-300 rounded-lg p-1.5 bg-white text-slate-800"
+                          >
+                            <option value={-1}>-- በፋይሉ የለም (ከልጁ ስም ይወጣል) --</option>
+                            {importHeaderCols.map((c) => (
+                              <option key={`c_par_${c.index}`} value={c.index}>
+                                {c.index + 1}. {c.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Phone Column */}
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 mb-1">የወላጅ ስልክ ቁጥር አምድ፦</label>
+                          <select
+                            value={importColPhone}
+                            onChange={(e) => {
+                              const v = parseInt(e.target.value, 10);
+                              setImportColPhone(v);
+                              handleReapplyMapping({ phoneIdx: v });
+                            }}
+                            className="w-full text-xs font-bold border border-slate-300 rounded-lg p-1.5 bg-white text-slate-800"
+                          >
+                            <option value={-1}>-- በፋይሉ የለም (ራስ-ሰር ፈልግ) --</option>
+                            {importHeaderCols.map((c) => (
+                              <option key={`c_pho_${c.index}`} value={c.index}>
+                                {c.index + 1}. {c.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Residence Column */}
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 mb-1">መኖሪያ ቀበሌ / መንደር አምድ፦</label>
+                          <select
+                            value={importColResidence}
+                            onChange={(e) => {
+                              const v = parseInt(e.target.value, 10);
+                              setImportColResidence(v);
+                              handleReapplyMapping({ residenceIdx: v });
+                            }}
+                            className="w-full text-xs font-bold border border-slate-300 rounded-lg p-1.5 bg-white text-slate-800"
+                          >
+                            <option value={-1}>-- በፋይሉ የለም --</option>
+                            {importHeaderCols.map((c) => (
+                              <option key={`c_res_${c.index}`} value={c.index}>
+                                {c.index + 1}. {c.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
                         {/* Reference Year for birth calculation */}
                         <div>
                           <label className="block text-[11px] font-bold text-slate-700 mb-1">ማስሊያ ዓመተ ምህረት፦</label>
@@ -3353,6 +3499,202 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
                     ? '🗑️ የሁሉንም ቻፕሎች መረጃ አጽዳ'
                     : `🗑️ የተመረጡትን (${clearSelectedChapels.length}) ቻፕሎች መረጃ አጽዳ`}
                 </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Chapel Management & Deletion Modal */}
+      {isChapelManagerOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-5 sm:p-6 shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between pb-3.5 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-900 flex items-center justify-center">
+                  <Church className="w-5 h-5 text-amber-800" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">
+                    የቻፕሎች (አጥቢያዎች) ማስተዳደሪያ እና መደለቻ
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    አዲስ ቻፕል ለመጨመር ወይም አላስፈላጊ ቻፕሎችን ለመሰረዝ (መደለዝ)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsChapelManagerOpen(false);
+                  setChapelToDelete(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 py-4 space-y-4 pr-1">
+              {/* Add New Chapel */}
+              <div className="bg-gradient-to-r from-amber-50 to-orange-50 p-4 rounded-xl border border-amber-200/80">
+                <label className="block text-xs font-bold text-amber-950 mb-1.5">
+                  + አዲስ ቻፕል ጨምር (Add New Chapel)፦
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="ምሳሌ፡ ኬብሮን ቻፕል"
+                    value={newChapelNameInput}
+                    onChange={(e) => setNewChapelNameInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (newChapelNameInput.trim() && onAddChapel) {
+                          onAddChapel(newChapelNameInput.trim());
+                          setNewChapelNameInput('');
+                        }
+                      }
+                    }}
+                    className="flex-1 px-3 py-2 text-xs border border-amber-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-bold"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newChapelNameInput.trim() && onAddChapel) {
+                        onAddChapel(newChapelNameInput.trim());
+                        setNewChapelNameInput('');
+                      }
+                    }}
+                    className="bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs px-4 py-2 rounded-xl transition shadow-xs cursor-pointer flex items-center gap-1"
+                  >
+                    <span>+ ጨምር</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Chapel List */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-extrabold text-slate-800 flex items-center justify-between">
+                  <span>በስርዓቱ ውስጥ ያሉ ቻፕሎች ({chapelStats.chapels.length})፦</span>
+                  <span className="text-[11px] text-slate-500 font-normal">መደለዝ ሲፈልጉ ከጎን ያለውን "መደለቻ" ይጫኑ</span>
+                </h4>
+                <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                  {chapelStats.chapels.map((ch) => {
+                    const st = chapelStats.statsMap[ch] || { total: 0, enrolled: 0, notEnrolled: 0, male: 0, female: 0 };
+                    const isDeletingThis = chapelToDelete === ch;
+
+                    return (
+                      <div
+                        key={`mgr_ch_${ch}`}
+                        className={`p-3.5 rounded-xl border transition-all ${
+                          isDeletingThis
+                            ? 'bg-rose-50 border-rose-300 shadow-sm'
+                            : 'bg-white border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-extrabold text-xs text-slate-900">🏛️ {ch}</span>
+                              <span className="bg-blue-100 text-blue-900 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                {st.total} ልጆች
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 mt-0.5">
+                              {st.enrolled} የሚማሩ | {st.notEnrolled} የማይማሩ
+                            </p>
+                          </div>
+
+                          {!isDeletingThis && onDeleteChapel && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (st.total === 0) {
+                                  onDeleteChapel(ch);
+                                } else {
+                                  setChapelToDelete(ch);
+                                  const remaining = chapelStats.chapels.filter((c) => c !== ch);
+                                  setReassignTargetChapel(remaining[0] || 'ያልተገለጸ ቻፕል');
+                                }
+                              }}
+                              className="bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-900 text-xs font-bold px-3 py-1.5 rounded-xl border border-rose-200 transition flex items-center gap-1.5 cursor-pointer shrink-0"
+                              title="ይህን ቻፕል ከስርዓቱ ሰርዝ (መደለቻ)"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                              <span>መደለቻ</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Deletion confirmation & reassign options */}
+                        {isDeletingThis && (
+                          <div className="mt-3 pt-3 border-t border-rose-200/80 space-y-2">
+                            <p className="text-[11px] font-bold text-rose-900">
+                              ⚠️ "{ch}" ቻፕል ይሰረዝ? {st.total > 0 && `(በዚህ ቻፕል ያሉትን ${st.total} ልጆች ወደ የት ይዛወሩ?)`}
+                            </p>
+                            {st.total > 0 && (
+                              <div>
+                                <label className="block text-[10px] font-bold text-slate-700 mb-1">
+                                  ልጆቹ የሚዛወሩበት ቻፕል ይምረጡ፦
+                                </label>
+                                <select
+                                  value={reassignTargetChapel}
+                                  onChange={(e) => setReassignTargetChapel(e.target.value)}
+                                  className="w-full text-xs font-bold border border-rose-300 rounded-lg p-2 bg-white text-slate-800"
+                                >
+                                  {chapelStats.chapels
+                                    .filter((c) => c !== ch)
+                                    .map((c) => (
+                                      <option key={`reassign_${c}`} value={c}>
+                                        ወደ "{c}" አዛውር
+                                      </option>
+                                    ))}
+                                  <option value="ያልተገለጸ ቻፕል">እንደ "ያልተገለጸ ቻፕል" አቆይ</option>
+                                </select>
+                              </div>
+                            )}
+                            <div className="flex items-center justify-end gap-2 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => setChapelToDelete(null)}
+                                className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-800 font-semibold bg-white border border-slate-300 rounded-lg"
+                              >
+                                ሰርዝ
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (onDeleteChapel) {
+                                    onDeleteChapel(ch, st.total > 0 ? reassignTargetChapel : undefined);
+                                    setChapelToDelete(null);
+                                  }
+                                }}
+                                className="px-3 py-1.5 text-xs font-bold bg-rose-700 hover:bg-rose-800 text-white rounded-lg shadow-xs flex items-center gap-1"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>አዎ፣ ቻፕሉን ደምስስ</span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsChapelManagerOpen(false);
+                  setChapelToDelete(null);
+                }}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow cursor-pointer"
+              >
+                ጨርስ / ዝጋ
               </button>
             </div>
           </div>

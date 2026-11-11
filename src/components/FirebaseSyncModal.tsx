@@ -185,17 +185,6 @@ export const FirebaseSyncModal: React.FC<FirebaseSyncModalProps> = ({
 
         {/* Content Body */}
         <div className="overflow-y-auto flex-1 py-4 space-y-4 pr-1 text-xs">
-          {/* Reassurance Banner */}
-          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-950">
-            <div className="flex items-center gap-2 font-bold text-sm text-emerald-800">
-              <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
-              <span>የእርስዎ የሰሩት ስራ አልጠፋም! (Data is Protected)</span>
-            </div>
-            <p className="mt-1 text-[11px] text-emerald-900 leading-relaxed">
-              የሰሯቸው ስራዎች በሙሉ በብሮውዘርዎ ማህደረ-ትውስታ ውስጥ ተቀምጠዋል።
-              አሁን በስርዓቱ ውስጥ፦ <strong>{totalStudents} ተማሪዎች</strong> እና <strong>{totalTeachers} መምህራን</strong> ተመዝግበው ይገኛሉ።
-            </p>
-          </div>
 
           {/* Status Notification Message */}
           {statusMessage && (

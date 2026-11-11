@@ -13,7 +13,6 @@ import {
   Target,
   UserCheck,
   BookMarked,
-  KeyRound,
   Users,
   HeartHandshake
 } from 'lucide-react';
@@ -44,7 +43,6 @@ import { TopAchieversTab } from './components/TopAchieversTab';
 import { PlanReportTab } from './components/PlanReportTab';
 import { TeachersTab } from './components/TeachersTab';
 import { SubjectsTab } from './components/SubjectsTab';
-import { PinManageTab } from './components/PinManageTab';
 import { FirebaseSyncModal } from './components/FirebaseSyncModal';
 
 export default function App() {
@@ -848,12 +846,12 @@ export default function App() {
     );
   };
 
-  const handleDeleteChapel = (chapelName: string) => {
+  const handleDeleteChapel = (chapelName: string, reassignTo?: string) => {
     updateAppData(
       (prev) => {
         const currentChapels = prev.chapels || DEFAULT_CHAPELS;
         const updatedChapels = currentChapels.filter((c) => c !== chapelName);
-        const fallbackChapel = updatedChapels.length > 0 ? updatedChapels[0] : 'ያልተገለጸ ቻፕል';
+        const fallbackChapel = reassignTo || (updatedChapels.length > 0 ? updatedChapels[0] : 'ያልተገለጸ ቻፕል');
         const updatedChildren = (prev.churchChildren || []).map((child) => {
           if (child.chapel === chapelName) {
             return { ...child, chapel: fallbackChapel };
@@ -864,6 +862,22 @@ export default function App() {
           ...prev,
           chapels: updatedChapels.length > 0 ? updatedChapels : ['ዋናው ማዕከል ቻፕል'],
           churchChildren: updatedChildren
+        };
+      },
+      { immediate: true }
+    );
+  };
+
+  const handleAddChapel = (newChapelName: string) => {
+    const trimmed = newChapelName.trim();
+    if (!trimmed) return;
+    updateAppData(
+      (prev) => {
+        const currentChapels = prev.chapels || DEFAULT_CHAPELS;
+        if (currentChapels.includes(trimmed)) return prev;
+        return {
+          ...prev,
+          chapels: [...currentChapels, trimmed]
         };
       },
       { immediate: true }
@@ -962,17 +976,6 @@ export default function App() {
     }));
   };
 
-  // Save Role PINs
-  const handleSavePins = (adminPin: string, leaderPin: string) => {
-    updateAppData((prev) => ({
-      ...prev,
-      pins: {
-        admin: adminPin,
-        leader: leaderPin
-      }
-    }));
-  };
-
   if (!appData) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white p-4">
@@ -993,9 +996,8 @@ export default function App() {
     { id: 'spiritualTab', label: 'መንፈሳዊ ትምህርት ቡድኖች', icon: BookOpen, roles: ['admin', 'leader', 'teacher'] },
     { id: 'topAchieversTab', label: 'ከ1ኛ - 3ኛ ደረጃዎች', icon: Award, roles: ['admin', 'leader', 'teacher'] },
     { id: 'planReportTab', label: 'የዓመት ዕቅድ & ሩብ ሪፖርት', icon: Target, roles: ['admin'] },
-    { id: 'teachersTab', label: 'የመምህራን ዝርዝር & PIN', icon: UserCheck, roles: ['admin', 'leader'] },
-    { id: 'subjectsTab', label: 'የትምህርት ዓይነቶች', icon: BookMarked, roles: ['admin', 'leader'] },
-    { id: 'pinManageTab', label: 'የመግቢያ ቁልፍ ቅንብር', icon: KeyRound, roles: ['admin'] },
+    { id: 'teachersTab', label: 'የመምህራን ዝርዝር', icon: UserCheck, roles: ['admin', 'leader'] },
+    { id: 'subjectsTab', label: 'የትምህርት ዓይነቶች', icon: BookMarked, roles: ['admin', 'leader'] }
   ];
 
   const visibleTabs = tabs.filter((t) => currentUserRole && t.roles.includes(currentUserRole));
@@ -1003,18 +1005,16 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-100/70 text-slate-900 flex flex-col font-sans print:min-h-0 print:bg-white print:block">
       {!currentUserRole ? (
-        // CLEAN OUTSIDE LOGIN SCREEN: Nothing from dashboard/database is visible outside!
+        // CLEAN OUTSIDE LOGIN SCREEN: Direct, frictionless entrance with zero PINs
         <div className="flex-1 flex flex-col justify-center items-center py-10 px-4">
           <LoginPortal
             teachers={appData.teachers}
-            adminPin={appData.pins?.admin || '1234'}
-            leaderPin={appData.pins?.leader || '5678'}
             chapelList={appData.chapels || DEFAULT_CHAPELS}
             onLoginSuccess={handleLoginSuccess}
           />
         </div>
       ) : (
-        // INSIDE DASHBOARD (Full management controls, header with year selector, backup tools, student counts, and system tabs)
+        // INSIDE DASHBOARD (Header with year selector, backup tools, student counts, and system tabs)
         <>
           <Header
             currentYear={currentYear}
@@ -1028,42 +1028,6 @@ export default function App() {
             syncStatus={syncStatus}
             onOpenSyncModal={() => setIsSyncModalOpen(true)}
           />
-
-          {/* Reassurance & Fast Data Protection Banner (Inside only) */}
-          {appData && (
-            <div className="bg-gradient-to-r from-emerald-950 via-teal-900 to-slate-900 text-white px-4 py-2.5 border-b border-emerald-700/50 print:hidden text-xs shadow-sm">
-              <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                  <span className="font-bold text-emerald-100">
-                    ✓ የሰሩት ስራ አልጠፋም! በደህንነት ተቀምጧል
-                  </span>
-                  <span className="text-emerald-300/90 hidden md:inline">
-                    (በስርዓቱ ውስጥ፦ {countStudentsInData(appData)} ተማሪዎች፣ {appData.teachers?.length || 0} መምህራን ተመዝግበዋል)
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => exportBackupJSON(appData)}
-                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1 rounded-lg text-[11px] transition flex items-center gap-1 shadow cursor-pointer"
-                    title="የሰሩትን ሙሉ መረጃ ወዲያውኑ ወደ ኮምፒዩተርዎ ያውርዱ"
-                  >
-                    <span>💾 ባክአፕ አውርድ (JSON)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsSyncModalOpen(true)}
-                    className="bg-blue-800 hover:bg-blue-700 text-amber-300 font-bold px-3 py-1 rounded-lg text-[11px] transition flex items-center gap-1 border border-blue-700 shadow cursor-pointer"
-                    title="የFirebase ግንኙነት ማስተካከያና የቀድሞ ስራ መፈለጊያ"
-                  >
-                    <span>⚙️ ዳታቤዝ ማስተካከያ & የቀድሞ ስራ መፈለጊያ</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
 
           <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 print:max-w-none print:w-full print:p-0 print:m-0">
             <div className="space-y-6 print:space-y-0">
@@ -1158,6 +1122,7 @@ export default function App() {
                   currentUserRole={currentUserRole}
                   loggedInChapel={loggedInChapel}
                   onDeleteChapel={handleDeleteChapel}
+                  onAddChapel={handleAddChapel}
                 />
               )}
 
@@ -1253,14 +1218,6 @@ export default function App() {
                   onAddSubject={handleAddSubject}
                   onDeleteSubject={handleDeleteSubject}
                   currentUserRole={currentUserRole}
-                />
-              )}
-
-              {activeTab === 'pinManageTab' && currentUserRole === 'admin' && (
-                <PinManageTab
-                  adminPin={appData.pins?.admin || '1234'}
-                  leaderPin={appData.pins?.leader || '5678'}
-                  onSavePins={handleSavePins}
                 />
               )}
             </div>
