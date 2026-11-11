@@ -29,8 +29,23 @@ export interface FirebaseProjectProfile {
 
 export const KNOWN_PROJECTS: FirebaseProjectProfile[] = [
   {
+    id: "gelatyadestachildco",
+    label: "gelatyadestachildco (አዲሱ ዋና ዳታቤዝ)",
+    config: {
+      apiKey: "AIzaSyA-SZ-gok1nnoGk3Gh7HVs6XTTRo0S-u3o",
+      authDomain: "gelatyadestachildco.firebaseapp.com",
+      databaseURL: "https://gelatyadestachildco-default-rtdb.firebaseio.com",
+      databaseURL_alt: "https://gelatyadestachildco-default-rtdb.europe-west1.firebasedatabase.app",
+      databaseURL_alt2: "https://gelatyadestachildco.firebaseio.com",
+      projectId: "gelatyadestachildco",
+      storageBucket: "gelatyadestachildco.firebasestorage.app",
+      messagingSenderId: "681157718787",
+      appId: "1:681157718787:web:3f5a393c787d2114aaef36"
+    }
+  },
+  {
     id: "birbir-town-khc-child-ministry",
-    label: "birbir-town-khc-child-ministry (ዋናው አዲሱ ዳታቤዝ)",
+    label: "birbir-town-khc-child-ministry (የቀድሞው ዳታቤዝ)",
     config: {
       apiKey: "AIzaSyAruE9nGOFGkGRHs1hbRT2EmLq1hJrWSb8",
       authDomain: "birbir-town-khc-child-ministry.firebaseapp.com",
@@ -61,7 +76,7 @@ export const KNOWN_PROJECTS: FirebaseProjectProfile[] = [
   },
   {
     id: "birbir-town-khc-child-page",
-    label: "birbir-town-khc-child-page (የቀድሞው ዳታቤዝ - ስራ የነበረበት)",
+    label: "birbir-town-khc-child-page",
     config: {
       apiKey: "AIzaSyBx7ZJxRNzjNb8Lx79R2vXjWq-MsZBPTfA",
       authDomain: "birbir-town-khc-child-page.firebaseapp.com",
@@ -96,8 +111,8 @@ const DB_KEY = 'kaleheywet_data';
 
 export const getActiveProjectId = (): string => {
   const saved = localStorage.getItem(ACTIVE_PROJECT_STORAGE_KEY);
-  if (!saved || saved === 'birbir-khc-child-page') {
-    return 'birbir-town-khc-child-ministry';
+  if (!saved || saved === 'birbir-khc-child-page' || saved === 'birbir-town-khc-child-ministry') {
+    return 'gelatyadestachildco';
   }
   return saved;
 };
@@ -111,7 +126,14 @@ export const getActiveProjectProfile = (): FirebaseProjectProfile => {
   return KNOWN_PROJECTS.find((p) => p.id === currentId) || KNOWN_PROJECTS[0];
 };
 
-export const firebaseConfig = getActiveProjectProfile().config;
+export const firebaseConfig = {
+  apiKey: "AIzaSyA-SZ-gok1nnoGk3Gh7HVs6XTTRo0S-u3o",
+  authDomain: "gelatyadestachildco.firebaseapp.com",
+  projectId: "gelatyadestachildco",
+  storageBucket: "gelatyadestachildco.firebasestorage.app",
+  messagingSenderId: "681157718787",
+  appId: "1:681157718787:web:3f5a393c787d2114aaef36"
+};
 
 // Initialize Firebase App
 let appInstance: FirebaseApp | null = null;
