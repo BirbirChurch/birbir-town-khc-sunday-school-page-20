@@ -848,6 +848,28 @@ export default function App() {
     );
   };
 
+  const handleDeleteChapel = (chapelName: string) => {
+    updateAppData(
+      (prev) => {
+        const currentChapels = prev.chapels || DEFAULT_CHAPELS;
+        const updatedChapels = currentChapels.filter((c) => c !== chapelName);
+        const fallbackChapel = updatedChapels.length > 0 ? updatedChapels[0] : 'ያልተገለጸ ቻፕል';
+        const updatedChildren = (prev.churchChildren || []).map((child) => {
+          if (child.chapel === chapelName) {
+            return { ...child, chapel: fallbackChapel };
+          }
+          return child;
+        });
+        return {
+          ...prev,
+          chapels: updatedChapels.length > 0 ? updatedChapels : ['ዋናው ማዕከል ቻፕል'],
+          churchChildren: updatedChildren
+        };
+      },
+      { immediate: true }
+    );
+  };
+
   // Plan handlers
   const handleUpdatePlan = (updatedPlan: AnnualPlanItem) => {
     updateAppData((prev) => ({
@@ -1135,6 +1157,7 @@ export default function App() {
                   onImportMissingStudentsToChurchChildren={handleImportMissingStudentsToChurchChildren}
                   currentUserRole={currentUserRole}
                   loggedInChapel={loggedInChapel}
+                  onDeleteChapel={handleDeleteChapel}
                 />
               )}
 

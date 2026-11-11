@@ -54,6 +54,7 @@ interface ChurchChildrenTabProps {
   ) => void;
   currentUserRole: Role | null;
   loggedInChapel?: string | null;
+  onDeleteChapel?: (chapelName: string) => void;
 }
 
 // Normalization function to match Amharic names accurately
@@ -236,7 +237,8 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
   onEnrollToSundaySchool,
   onImportMissingStudentsToChurchChildren,
   currentUserRole,
-  loggedInChapel
+  loggedInChapel,
+  onDeleteChapel
 }) => {
   // State
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -1576,12 +1578,29 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
                   <h4 className="font-extrabold text-xs text-slate-900 truncate pr-1" title={ch}>
                     {ch}
                   </h4>
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => {}} // handled by parent onClick
-                    className="w-3.5 h-3.5 text-blue-900 rounded focus:ring-blue-600 pointer-events-none shrink-0"
-                  />
+                  <div className="flex items-center gap-1">
+                    {onDeleteChapel && (currentUserRole === 'admin' || currentUserRole === 'leader') && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm(`"${ch}" ቻፕል ከስርዓቱ በቋሚነት እንዲሰረዝ ይፈልጋሉ?`)) {
+                            onDeleteChapel(ch);
+                          }
+                        }}
+                        className="p-1 hover:bg-rose-100 text-slate-400 hover:text-rose-700 rounded transition cursor-pointer"
+                        title="ቻፕል ሰርዝ"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => {}} // handled by parent onClick
+                      className="w-3.5 h-3.5 text-blue-900 rounded focus:ring-blue-600 pointer-events-none shrink-0"
+                    />
+                  </div>
                 </div>
                 <div className="mt-2 flex items-baseline justify-between">
                   <span className="text-xl font-black text-slate-900 tabular-nums">{st.total}</span>
@@ -1925,13 +1944,30 @@ export const ChurchChildrenTab: React.FC<ChurchChildrenTabProps> = ({
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleToggleTabChapelFilter(chName)}
-                      className="bg-white/10 hover:bg-white/20 text-white font-bold text-xs px-3 py-1.5 rounded-xl border border-white/20 transition print:hidden shrink-0 cursor-pointer"
-                    >
-                      {selectedChapels.includes(chName) ? '✕ ምርጫውን አስወግድ' : '🔍 ይህን ቻፕል ብቻ አሳይ'}
-                    </button>
+                    <div className="flex items-center gap-2 print:hidden shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleTabChapelFilter(chName)}
+                        className="bg-white/10 hover:bg-white/20 text-white font-bold text-xs px-3 py-1.5 rounded-xl border border-white/20 transition shrink-0 cursor-pointer"
+                      >
+                        {selectedChapels.includes(chName) ? '✕ ምርጫውን አስወግድ' : '🔍 ይህን ቻፕል ብቻ አሳይ'}
+                      </button>
+                      {onDeleteChapel && (currentUserRole === 'admin' || currentUserRole === 'leader') && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`"${chName}" ቻፕል ከስርዓቱ በቋሚነት እንዲሰረዝ ይፈልጋሉ?`)) {
+                              onDeleteChapel(chName);
+                            }
+                          }}
+                          className="bg-rose-500/20 hover:bg-rose-500/40 text-rose-200 hover:text-white font-bold text-xs px-3 py-1.5 rounded-xl border border-rose-400/40 transition shrink-0 cursor-pointer flex items-center gap-1"
+                          title="ቻፕል ሰርዝ"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-300" />
+                          <span>ቻፕል ሰርዝ</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Chapel Children Table */}
