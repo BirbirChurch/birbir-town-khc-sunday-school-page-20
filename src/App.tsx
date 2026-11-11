@@ -980,57 +980,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-100/70 text-slate-900 flex flex-col font-sans print:min-h-0 print:bg-white print:block">
-      <Header
-        currentYear={currentYear}
-        years={appData?.years || ['2019']}
-        onYearChange={setCurrentYear}
-        onAddYear={handleAddYear}
-        currentUserRole={currentUserRole}
-        loggedInTeacherName={loggedInTeacher?.name}
-        loggedInChapel={loggedInChapel}
-        onLogout={handleLogout}
-        syncStatus={syncStatus}
-        onOpenSyncModal={() => setIsSyncModalOpen(true)}
-      />
-
-      {/* Reassurance & Fast Data Protection Banner */}
-      {appData && (
-        <div className="bg-gradient-to-r from-emerald-950 via-teal-900 to-slate-900 text-white px-4 py-2.5 border-b border-emerald-700/50 print:hidden text-xs shadow-sm">
-          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-              <span className="font-bold text-emerald-100">
-                ✓ የሰሩት ስራ አልጠፋም! በደህንነት ተቀምጧል
-              </span>
-              <span className="text-emerald-300/90 hidden md:inline">
-                (በስርዓቱ ውስጥ፦ {countStudentsInData(appData)} ተማሪዎች፣ {appData.teachers?.length || 0} መምህራን ተመዝግበዋል)
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={() => exportBackupJSON(appData)}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1 rounded-lg text-[11px] transition flex items-center gap-1 shadow"
-                title="የሰሩትን ሙሉ መረጃ ወዲያውኑ ወደ ኮምፒዩተርዎ ያውርዱ"
-              >
-                <span>💾 ባክአፕ አውርድ (JSON)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsSyncModalOpen(true)}
-                className="bg-blue-800 hover:bg-blue-700 text-amber-300 font-bold px-3 py-1 rounded-lg text-[11px] transition flex items-center gap-1 border border-blue-700 shadow"
-                title="የFirebase ግንኙነት ማስተካከያና የቀድሞ ስራ መፈለጊያ"
-              >
-                <span>⚙️ ዳታቤዝ ማስተካከያ & የቀድሞ ስራ መፈለጊያ</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 print:max-w-none print:w-full print:p-0 print:m-0">
-        {!currentUserRole ? (
+      {!currentUserRole ? (
+        // CLEAN OUTSIDE LOGIN SCREEN: Nothing from dashboard/database is visible outside!
+        <div className="flex-1 flex flex-col justify-center items-center py-10 px-4">
           <LoginPortal
             teachers={appData.teachers}
             adminPin={appData.pins?.admin || '1234'}
@@ -1038,11 +990,64 @@ export default function App() {
             chapelList={appData.chapels || DEFAULT_CHAPELS}
             onLoginSuccess={handleLoginSuccess}
           />
-        ) : (
-          <div className="space-y-6 print:space-y-0">
-            {/* Top Navigation Tabs */}
-            <div className="bg-white p-2 rounded-2xl border border-slate-200/80 shadow-sm print:hidden">
-              <nav className="flex space-x-1 sm:space-x-2 overflow-x-auto scrollbar-thin py-1 px-1">
+        </div>
+      ) : (
+        // INSIDE DASHBOARD (Full management controls, header with year selector, backup tools, student counts, and system tabs)
+        <>
+          <Header
+            currentYear={currentYear}
+            years={appData?.years || ['2019']}
+            onYearChange={setCurrentYear}
+            onAddYear={handleAddYear}
+            currentUserRole={currentUserRole}
+            loggedInTeacherName={loggedInTeacher?.name}
+            loggedInChapel={loggedInChapel}
+            onLogout={handleLogout}
+            syncStatus={syncStatus}
+            onOpenSyncModal={() => setIsSyncModalOpen(true)}
+          />
+
+          {/* Reassurance & Fast Data Protection Banner (Inside only) */}
+          {appData && (
+            <div className="bg-gradient-to-r from-emerald-950 via-teal-900 to-slate-900 text-white px-4 py-2.5 border-b border-emerald-700/50 print:hidden text-xs shadow-sm">
+              <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                  <span className="font-bold text-emerald-100">
+                    ✓ የሰሩት ስራ አልጠፋም! በደህንነት ተቀምጧል
+                  </span>
+                  <span className="text-emerald-300/90 hidden md:inline">
+                    (በስርዓቱ ውስጥ፦ {countStudentsInData(appData)} ተማሪዎች፣ {appData.teachers?.length || 0} መምህራን ተመዝግበዋል)
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => exportBackupJSON(appData)}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1 rounded-lg text-[11px] transition flex items-center gap-1 shadow cursor-pointer"
+                    title="የሰሩትን ሙሉ መረጃ ወዲያውኑ ወደ ኮምፒዩተርዎ ያውርዱ"
+                  >
+                    <span>💾 ባክአፕ አውርድ (JSON)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsSyncModalOpen(true)}
+                    className="bg-blue-800 hover:bg-blue-700 text-amber-300 font-bold px-3 py-1 rounded-lg text-[11px] transition flex items-center gap-1 border border-blue-700 shadow cursor-pointer"
+                    title="የFirebase ግንኙነት ማስተካከያና የቀድሞ ስራ መፈለጊያ"
+                  >
+                    <span>⚙️ ዳታቤዝ ማስተካከያ & የቀድሞ ስራ መፈለጊያ</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 print:max-w-none print:w-full print:p-0 print:m-0">
+            <div className="space-y-6 print:space-y-0">
+              {/* Top Navigation Tabs */}
+              <div className="bg-white p-2 rounded-2xl border border-slate-200/80 shadow-sm print:hidden">
+                <nav className="flex space-x-1 sm:space-x-2 overflow-x-auto scrollbar-thin py-1 px-1">
                 {visibleTabs.map((tab) => {
                   const Icon = tab.icon;
                   const isActive = activeTab === tab.id;
@@ -1237,8 +1242,9 @@ export default function App() {
               )}
             </div>
           </div>
-        )}
-      </main>
+        </main>
+        </>
+      )}
 
       <footer className="mt-auto py-6 border-t border-slate-200/80 bg-white text-center text-xs text-slate-500 print:hidden">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
